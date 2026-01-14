@@ -168,7 +168,6 @@ See [docs/README.md](docs/README.md) for complete documentation:
 - Testing guides
 - Troubleshooting
 
-Or see [docs/INDEX.md](docs/INDEX.md) for quick navigation.
 
 ## License
 
