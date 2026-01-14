@@ -129,7 +129,7 @@ Access:
 - **[Deployment](docs/DEPLOYMENT.md)** - Production deployment guide
 - **[CI/CD](docs/CI_CD.md)** - Continuous integration setup
 
-See [docs/README.md](docs/README.md) for complete documentation index.
+All documentation is in the `docs/` directory.
 
 ## 🛠️ Development
 
