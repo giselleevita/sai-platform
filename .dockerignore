@@ -1,0 +1,15 @@
+node_modules
+npm-debug.log
+dist
+.next
+.turbo
+.env
+.env.*
+*.log
+coverage
+tmp
+.DS_Store
+**/node_modules
+**/.next
+**/dist
+**/.turbo

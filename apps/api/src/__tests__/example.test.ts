@@ -1,0 +1,15 @@
+/**
+ * Example test file
+ * Run with: npm test
+ */
+
+describe('Example Test Suite', () => {
+  it('should pass a basic test', () => {
+    expect(1 + 1).toBe(2);
+  });
+
+  it('should handle string operations', () => {
+    const str = 'Hello, World!';
+    expect(str.toLowerCase()).toBe('hello, world!');
+  });
+});

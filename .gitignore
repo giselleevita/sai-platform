@@ -1,0 +1,14 @@
+node_modules/
+.env
+.env.local
+.env.*.local
+.env.save
+dist/
+.next/
+*.log
+.DS_Store
+.vscode/
+.idea/
+*.swp
+coverage/
+.turbo/

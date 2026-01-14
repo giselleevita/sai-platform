@@ -1,0 +1,22 @@
+{
+  "name": "sai-platform",
+  "version": "0.1.0",
+  "description": "Secure AI Integration SaaS Platform",
+  "private": true,
+  "packageManager": "npm@10.0.0",
+  "workspaces": [
+    "apps/*",
+    "packages/*",
+    "services/*"
+  ],
+  "scripts": {
+    "dev": "turbo run dev --parallel",
+    "build": "turbo run build",
+    "test": "turbo run test",
+    "lint": "turbo run lint"
+  },
+  "devDependencies": {
+    "prisma": "^5.22.0",
+    "turbo": "^2.0.0"
+  }
+}
