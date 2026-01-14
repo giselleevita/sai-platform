@@ -18,7 +18,3 @@ Essential documentation for the SAI Platform.
 
 - **[DEPLOYMENT.md](./DEPLOYMENT.md)** - Deployment guide
 - **[CI_CD.md](./CI_CD.md)** - CI/CD setup
-
-## 📊 Status
-
-- **[PLATFORM_READY.md](./PLATFORM_READY.md)** - Production readiness status
