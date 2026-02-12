@@ -39,6 +39,7 @@ This is the minimum reliable gate for MVP merges:
 - **CodeQL** (`.github/workflows/codeql.yml`)
   - Static analysis on push/PR to `main`
   - Weekly scheduled scan
+  - Runs in non-upload mode unless GitHub code scanning is enabled in repository settings
 - **Dependabot** (`.github/dependabot.yml`)
   - Weekly npm dependency update PRs
   - Weekly GitHub Actions update PRs
