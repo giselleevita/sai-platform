@@ -60,6 +60,7 @@ Description: Validate one complete governance flow with seeded sample data.
 Acceptance criteria:
 - Documented steps produce one tool, one risk, one evidence item, one report.
 - API responses are valid and visible in UI.
+- Implemented smoke script: `tests/api/test-mvp-happy-path.sh`.
 Dependencies/blockers: Milestone 1 complete.
 
 ### Issue M2-2: CSRF/auth usability smoke checks
@@ -74,6 +75,7 @@ Description: Add a script that verifies the MVP flow against local API.
 Acceptance criteria:
 - Script exits non-zero on failed step.
 - Script verifies create/read for inventory and risk.
+- Script uses cookie + CSRF aware flow for protected write endpoints.
 Dependencies/blockers: M2-1.
 
 ## Milestone 3: Polish + release

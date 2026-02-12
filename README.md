@@ -137,6 +137,9 @@ npm run build
 # Run tests
 npm run test
 
+# Run core MVP end-to-end smoke flow
+npm run test:mvp
+
 # Database management
 cd apps/api
 npm run db:studio    # Open Prisma Studio (database GUI)
