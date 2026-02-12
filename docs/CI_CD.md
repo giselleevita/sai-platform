@@ -1,20 +1,35 @@
 ## CI/CD Design (GitHub Actions)
 
 - **Pipeline file**: `.github/workflows/ci.yml`
-- **Triggers**: `push` to `main` and all `pull_request`.
-- **Services**: Postgres 15 service container for Prisma validation.
-- **Steps**:
-  1) `npm ci`
-  2) `npx prisma generate --schema apps/api/prisma/schema.prisma`
-  3) `npm run lint --workspace web`
-  4) `npm run build --workspace @sai/api`
-  5) `npm run build --workspace web`
-  6) `npx prisma migrate diff --from-schema-datamodel apps/api/prisma/schema.prisma --to-empty --script`
+- **Workflow name**: `Quality Gate`
+- **Triggers**:
+  - `pull_request` to `main`
+  - `push` to `main`
 
-- **Env defaults**: `DATABASE_URL` uses the Postgres service; `NEXT_PUBLIC_API_URL`/`NEXT_PUBLIC_APP_URL` set to local defaults for build parity.
+### Quality Gate Job
 
-### Deployment hooks (recommended next)
-- Add a second workflow for deployments that:
-  - Builds/pushes images from `apps/api/Dockerfile` and `apps/web/Dockerfile` to GHCR/ECR.
-  - Runs `prisma migrate deploy` against staging/prod before updating services.
-  - Deploys API to ECS Fargate and uploads Next.js static output to S3+CloudFront (or triggers Vercel deploy).
+Job name: `Build + Test (Node 20)`
+
+Steps:
+1. `npm ci`
+2. `npm run check:node`
+3. `npm run build`
+4. `npm run test`
+
+Runtime:
+- Node version comes from `.nvmrc`
+- npm dependency caching enabled via `actions/setup-node`
+
+## Why This Gate
+
+This is the minimum reliable gate for MVP merges:
+- catches compile/build regressions
+- catches baseline automated test failures
+- keeps runtime consistent with local setup
+
+## Merge Blocking Requirement
+
+To make failing checks block merges, GitHub branch protection or rulesets must be enabled for `main` and require the status check from this workflow.
+
+On the current repository plan, branch protection/rulesets API access returns `403` (feature unavailable), so enforcement must be configured in repository settings after plan upgrade or moving to a public repository.
+
