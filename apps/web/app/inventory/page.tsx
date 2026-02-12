@@ -88,6 +88,7 @@ export default function InventoryPage() {
 
   // Tools are already filtered/sorted by the API
   const filteredAndSortedTools = tools;
+  const hasActiveFilters = searchQuery.trim().length > 0 || filterRisk !== 'All';
 
   if (loading) {
     return (
@@ -161,7 +162,15 @@ export default function InventoryPage() {
       <div className="max-w-7xl mx-auto py-12 px-4 sm:px-6 lg:px-8">
         {error && (
           <div className="mb-6 rounded-md bg-red-50 p-4">
-            <p className="text-sm font-medium text-red-800">{error}</p>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <p className="text-sm font-medium text-red-800">{error}</p>
+              <button
+                onClick={() => loadTools(pagination.page)}
+                className="inline-flex items-center rounded-md border border-red-200 bg-white px-3 py-1.5 text-xs font-medium text-red-700 hover:bg-red-50"
+              >
+                Retry
+              </button>
+            </div>
           </div>
         )}
 
@@ -262,20 +271,43 @@ export default function InventoryPage() {
           </div>
         ) : filteredAndSortedTools.length === 0 ? (
           <div className="text-center py-12 bg-white rounded-lg shadow">
-            <p className="text-gray-500 text-lg">
-              {searchQuery ? 'No tools match your search' : 'No tools found'}
+            <h3 className="text-lg font-semibold text-gray-900">
+              {hasActiveFilters ? 'No tools match the current filters' : 'No tools in inventory yet'}
+            </h3>
+            <p className="mt-2 text-sm text-gray-500">
+              {hasActiveFilters
+                ? `Try changing search or risk filter (current risk filter: ${filterRisk}).`
+                : 'Add your first tool or import existing records to start risk tracking.'}
             </p>
-            {searchQuery && (
-              <button
-                onClick={() => {
-                  setSearchQuery('');
-                  loadTools(1);
-                }}
-                className="mt-4 text-blue-600 hover:text-blue-900"
-              >
-                Clear search
-              </button>
-            )}
+            <div className="mt-5 flex flex-col items-center justify-center gap-3 sm:flex-row">
+              {hasActiveFilters ? (
+                <button
+                  onClick={() => {
+                    setSearchQuery('');
+                    setFilterRisk('All');
+                    setSortBy('riskScore');
+                  }}
+                  className="inline-flex items-center rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                >
+                  Reset filters
+                </button>
+              ) : (
+                <>
+                  <Link
+                    href="/inventory/add"
+                    className="inline-flex items-center rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+                  >
+                    Add your first tool
+                  </Link>
+                  <Link
+                    href="/inventory/import"
+                    className="inline-flex items-center rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                  >
+                    Import tools
+                  </Link>
+                </>
+              )}
+            </div>
           </div>
         ) : (
           <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
