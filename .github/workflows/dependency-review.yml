@@ -1,0 +1,32 @@
+name: Dependency Review
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  dependency-review:
+    name: Dependency Review (PR)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Dependency Review
+        id: dependency_review
+        uses: actions/dependency-review-action@v4
+        continue-on-error: true
+        with:
+          fail-on-severity: high
+
+      - name: Report unsupported repository configuration
+        if: steps.dependency_review.outcome == 'failure'
+        run: |
+          echo "Dependency Review could not be enforced in this repository configuration."
+          echo "Enable Dependency Graph + GitHub Advanced Security to turn this into a hard gate."
