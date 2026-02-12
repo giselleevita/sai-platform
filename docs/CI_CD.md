@@ -38,7 +38,8 @@ This is the minimum reliable gate for MVP merges:
   - `Secret Scan`: runs `gitleaks` on every PR/push to `main`
 - **Pipeline file**: `.github/workflows/dependency-review.yml`
 - **Job**:
-  - `Dependency Review (PR)`: fails PRs introducing high/critical vulnerable dependencies
+  - `Dependency Review (PR)`: checks PR dependency risk and enforces high severity when repository security features are available
+  - If repository-level support is missing, the job reports a warning instead of blocking merges
 
 ## Secure SDLC Automation
 
