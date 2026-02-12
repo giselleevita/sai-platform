@@ -6,7 +6,7 @@ Complete guide to set up and start using the SAI Platform.
 
 Before you begin, ensure you have:
 
-- **Node.js** v18 or higher ([Download](https://nodejs.org/))
+- **Node.js** v20.9 or higher ([Download](https://nodejs.org/))
 - **npm** v9 or higher (comes with Node.js)
 - **Docker Desktop** ([Download](https://www.docker.com/products/docker-desktop))
 - **Git** ([Download](https://git-scm.com/))
@@ -14,7 +14,7 @@ Before you begin, ensure you have:
 ### Verify Installation
 
 ```bash
-node --version    # Should be v18+
+node --version    # Should be v20.9+
 npm --version     # Should be v9+
 docker --version  # Should be installed
 git --version     # Should be installed

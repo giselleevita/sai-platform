@@ -1,149 +1,54 @@
-# Quick Reference - 5-Minute Test Suite
-
-⚡ **START HERE** - Quick verification checklist
+# Quick Reference - MVP Smoke Test
 
 ## Prerequisites
 
 ```bash
-# 1. Start database
-docker-compose up -d postgres
+# 1) Start local stack
+npm run setup
 
-# 2. Start servers
+# 2) Start app servers
 npm run dev
 ```
 
-## 5-Minute Test Suite
+## Run the MVP Flow
 
-### Test 1: Health Check ✅
 ```bash
-curl http://localhost:3001/health
+# In a second terminal
+npm run test:mvp
 ```
-**Expected**: `{"status":"ok","timestamp":"..."}`
 
-### Test 2: Signup ✅
+This script validates the core local MVP flow end-to-end:
+
+1. Signup user
+2. Create AI tool (inventory)
+3. Create risk
+4. Create policy + control
+5. Create evidence
+6. Generate risk report
+
+## Run CSRF/Auth Smoke
+
 ```bash
-curl -X POST http://localhost:3001/api/auth/signup \
-  -H "Content-Type: application/json" \
-  -d '{
-    "email": "test@sai.com",
-    "password": "Password123",
-    "name": "Test User",
-    "companyName": "Test Company"
-  }'
+npm run test:csrf
 ```
-**Expected**: `{"success":true,"data":{"token":"...","user":{...},"company":{...}}}`
 
-**Save the token** from response!
+This script verifies CSRF protection behavior explicitly:
 
-### Test 3: Token Validation ✅
-```bash
-# Replace YOUR_TOKEN with token from Test 2
-curl -H "Authorization: Bearer YOUR_TOKEN" \
-  http://localhost:3001/api/auth/me
-```
-**Expected**: `{"success":true,"data":{"id":"...","email":"test@sai.com",...}}`
+1. Protected write without CSRF header returns `401`.
+2. Protected write with CSRF header returns `201`.
 
-### Test 4: Required Fields Validation ✅
-```bash
-curl -X POST http://localhost:3001/api/auth/signup \
-  -H "Content-Type: application/json" \
-  -d '{"email": "test2@test.com"}'
-```
-**Expected**: `{"success":false,"error":"..."}` (validation error)
+## Expected Result
 
-### Test 5: Email Format Validation ✅
-```bash
-curl -X POST http://localhost:3001/api/auth/signup \
-  -H "Content-Type: application/json" \
-  -d '{
-    "email": "invalid-email",
-    "password": "Password123",
-    "name": "Test",
-    "companyName": "Test Co"
-  }'
-```
-**Expected**: `{"success":false,"error":"Invalid email format"}`
+- Command exits with code `0`
+- Output includes `✅ Flow complete` (for MVP flow)
+- Output includes `CSRF/auth smoke test passed` (for CSRF flow)
 
-### Test 6: Password Strength ✅
-```bash
-curl -X POST http://localhost:3001/api/auth/signup \
-  -H "Content-Type: application/json" \
-  -d '{
-    "email": "test3@test.com",
-    "password": "weak",
-    "name": "Test",
-    "companyName": "Test Co"
-  }'
-```
-**Expected**: `{"success":false,"error":"Password does not meet requirements"}`
+## Common Failures
 
-### Test 7: Create AI Tool ✅
-```bash
-# Replace YOUR_TOKEN with token from Test 2
-curl -X POST http://localhost:3001/api/inventory \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer YOUR_TOKEN" \
-  -d '{
-    "name": "ChatGPT",
-    "category": "LLM",
-    "dataTypes": ["PII"],
-    "users": 25,
-    "frequency": "Daily",
-    "controls": ["MFA"]
-  }'
-```
-**Expected**: `{"success":true,"data":{"id":"...","riskScore":...,"riskLevel":"..."}}`
-
-### Test 8: Company Isolation ✅
-```bash
-# Create second company
-curl -X POST http://localhost:3001/api/auth/signup \
-  -H "Content-Type: application/json" \
-  -d '{
-    "email": "company2@test.com",
-    "password": "Password123",
-    "name": "User 2",
-    "companyName": "Company 2"
-  }'
-# Save token2
-
-# Try to access first company's tools with second company's token
-curl -H "Authorization: Bearer TOKEN2" \
-  http://localhost:3001/api/inventory
-```
-**Expected**: Empty array `{"success":true,"data":[]}` (no tools from company 1)
-
-### Test 9: List Tools ✅
-```bash
-# Use token from Test 2
-curl -H "Authorization: Bearer YOUR_TOKEN" \
-  http://localhost:3001/api/inventory
-```
-**Expected**: `{"success":true,"data":[{"id":"...","name":"ChatGPT",...}]}`
-
-### Test 10: Risk Summary ✅
-```bash
-curl -H "Authorization: Bearer YOUR_TOKEN" \
-  http://localhost:3001/api/inventory/summary
-```
-**Expected**: `{"success":true,"data":{"totalTools":1,"riskCounts":{...},"averageRiskScore":...}}`
-
-## ✅ Verification Checklist
-
-- [ ] All 10 tests pass
-- [ ] No errors in console
-- [ ] Company isolation works (Test 8)
-- [ ] Validation works (Tests 4-6)
-- [ ] Risk scoring works (Test 7)
-
-## 🚨 If Tests Fail
-
-1. Check database is running: `docker-compose ps`
-2. Check servers are running: `npm run dev`
-3. Check logs for errors
-4. Verify .env files exist
-5. Run migrations: `cd apps/api && npx prisma migrate dev`
-
-## Next Steps
-
-If all tests pass → Ready for **top-10-edge-cases.md** testing!
+- `Invalid CSRF token`
+  - Run the flow only through `npm run test:mvp` (it manages cookie + CSRF state automatically).
+  - Run `npm run test:csrf` to verify expected failure/success behavior explicitly.
+- `connect ECONNREFUSED`
+  - API is not running on `http://localhost:3001`.
+- Prisma/DB errors
+  - Ensure Docker is running and rerun `npm run setup`.
