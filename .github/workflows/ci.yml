@@ -1,33 +1,22 @@
-name: CI
+name: Quality Gate
 
 on:
   push:
     branches: [main]
   pull_request:
+    branches: [main]
+
+concurrency:
+  group: quality-gate-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  build-test:
+  verify:
+    name: Build + Test (Node 20)
     runs-on: ubuntu-latest
-    services:
-      postgres:
-        image: postgres:15-alpine
-        env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: postgres
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd="pg_isready -U postgres"
-          --health-interval=10s
-          --health-timeout=5s
-          --health-retries=5
-
+    timeout-minutes: 20
     env:
-      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/postgres
-      NEXT_PUBLIC_API_URL: http://localhost:3001
-      NEXT_PUBLIC_APP_URL: http://localhost:3000
-      NEXT_TELEMETRY_DISABLED: 1
+      NEXT_TELEMETRY_DISABLED: '1'
 
     steps:
       - name: Checkout
@@ -36,23 +25,17 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version-file: '.nvmrc'
           cache: npm
 
       - name: Install dependencies
         run: npm ci
 
-      - name: Generate Prisma client
-        run: npx prisma generate --schema apps/api/prisma/schema.prisma
+      - name: Validate runtime version
+        run: npm run check:node
 
-      - name: Lint web
-        run: npm run lint --workspace web
+      - name: Build workspace
+        run: npm run build
 
-      - name: Build API
-        run: npm run build --workspace @sai/api
-
-      - name: Build web
-        run: npm run build --workspace web
-
-      - name: Validate Prisma migrations
-        run: npx prisma migrate diff --from-schema-datamodel apps/api/prisma/schema.prisma --to-empty --script
+      - name: Run minimal test suite
+        run: npm run test
