@@ -142,7 +142,7 @@ ls apps/web/.env.local
 Before starting, verify:
 
 - [ ] Docker Desktop is running (or Docker service on Linux)
-- [ ] Node.js v18+ installed (`node --version`)
+- [ ] Node.js v20.9+ installed (`node --version`)
 - [ ] npm v9+ installed (`npm --version`)
 - [ ] Dependencies installed (`npm install`)
 - [ ] Environment files exist (`apps/api/.env`, `apps/web/.env.local`)
@@ -159,7 +159,7 @@ Before starting, verify:
 
 2. **Check Node:**
    ```bash
-   node --version  # Should be v18+
+   node --version  # Should be v20.9+
    npm --version   # Should be v9+
    ```
 

@@ -78,7 +78,7 @@ sai-platform/
 
 ### Prerequisites
 
-- Node.js v18 or higher
+- Node.js v20.9 or higher
 - npm v9 or higher
 - Docker and Docker Compose (for local database)
 - Git
