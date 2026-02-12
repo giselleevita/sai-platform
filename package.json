@@ -17,7 +17,8 @@
     "check:node": "node scripts/check-node-version.cjs",
     "predev": "npm run check:node",
     "prebuild": "npm run check:node",
-    "pretest": "npm run check:node"
+    "pretest": "npm run check:node",
+    "setup": "bash scripts/setup.sh"
   },
   "devDependencies": {
     "prisma": "^5.22.0",

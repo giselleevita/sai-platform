@@ -89,22 +89,14 @@ sai-platform/
 # 1. Install dependencies
 npm install
 
-# 2. Start local database
-docker-compose up -d
+# 2. Run one-command local setup
+npm run setup
 
-# 3. Set up database
-cd apps/api
-npm run db:generate  # Generate Prisma Client
-npm run db:migrate   # Run database migrations
+# 3. Configure environment variables (if needed)
+# apps/api/.env will be created from apps/api/env.example
+# Update JWT_SECRET before sharing environments
 
-# 4. Configure environment variables
-# Create apps/api/.env with:
-# DATABASE_URL=postgresql://sai_user:sai_password@localhost:5432/sai_db
-# JWT_SECRET=your-secret-key
-# PORT=3001
-
-# 5. Start development servers
-cd ../..
+# 4. Start development servers
 npm run dev
 ```
 
