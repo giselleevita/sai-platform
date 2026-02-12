@@ -36,6 +36,10 @@ This is the minimum reliable gate for MVP merges:
 - **Jobs**:
   - `Dependency Audit`: fails on high/critical production dependency vulnerabilities (`npm audit --omit=dev --audit-level=high`)
   - `Secret Scan`: runs `gitleaks` on every PR/push to `main`
+- **Pipeline file**: `.github/workflows/dependency-review.yml`
+- **Job**:
+  - `Dependency Review (PR)`: checks PR dependency risk and enforces high severity when repository security features are available
+  - If repository-level support is missing, the job reports a warning instead of blocking merges
 
 ## Secure SDLC Automation
 
@@ -46,6 +50,14 @@ This is the minimum reliable gate for MVP merges:
 - **Dependabot** (`.github/dependabot.yml`)
   - Weekly npm dependency update PRs
   - Weekly GitHub Actions update PRs
+
+## Security Governance Files
+
+- **Security policy**: `SECURITY.md`
+  - Private vulnerability reporting via GitHub Security Advisories
+  - Response/triage/remediation target timelines
+- **Ownership**: `.github/CODEOWNERS`
+  - Default owner coverage for all repository paths
 
 ## Merge Blocking Requirement
 
