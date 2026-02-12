@@ -13,7 +13,11 @@
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
     "db:studio": "prisma studio",
-    "db:push": "prisma db push"
+    "db:push": "prisma db push",
+    "check:node": "node ../../scripts/check-node-version.cjs",
+    "predev": "npm run check:node",
+    "prebuild": "npm run check:node",
+    "pretest": "npm run check:node"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",

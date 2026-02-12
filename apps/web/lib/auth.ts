@@ -1,37 +1,60 @@
 /**
  * Auth utility functions
- * Handles cookie-based authentication with CSRF tokens
+ * Handles cookie-based authentication with CSRF tokens.
  */
 
+function getCookie(name: string): string | null {
+  if (typeof document === 'undefined') return null;
+
+  const prefix = `${name}=`;
+  const match = document.cookie
+    .split(';')
+    .map((entry) => entry.trim())
+    .find((entry) => entry.startsWith(prefix));
+
+  if (!match) return null;
+  const value = match.slice(prefix.length);
+  return decodeURIComponent(value);
+}
+
 /**
- * Check if user is authenticated
- * Returns true if CSRF token exists (cookies are checked by server)
+ * Get CSRF token from cookie first, then localStorage fallback.
  */
-export function isAuthenticated(): boolean {
+export function getCsrfToken(): string | null {
+  if (typeof window === 'undefined') return null;
+
+  const cookieToken = getCookie('csrf-token');
+  if (cookieToken) return cookieToken;
+
+  return localStorage.getItem('csrf-token');
+}
+
+/**
+ * Check whether a user likely has an authenticated browser session.
+ */
+export function hasAuthSession(): boolean {
   if (typeof window === 'undefined') return false;
-  
-  // Check for CSRF token (primary method)
-  const csrfToken = localStorage.getItem('csrf-token');
+
+  const csrfToken = getCsrfToken();
   if (csrfToken) return true;
-  
-  // Fallback to legacy token (for backward compatibility)
+
+  // Legacy fallback while old auth flow exists in some pages
   const legacyToken = localStorage.getItem('token');
   return !!legacyToken;
 }
 
 /**
- * Get CSRF token
+ * Backward-compatible alias.
  */
-export function getCsrfToken(): string | null {
-  if (typeof window === 'undefined') return null;
-  return localStorage.getItem('csrf-token');
+export function isAuthenticated(): boolean {
+  return hasAuthSession();
 }
 
 /**
- * Clear all auth tokens
+ * Clear client-side auth artifacts.
  */
 export function clearAuth(): void {
   if (typeof window === 'undefined') return;
   localStorage.removeItem('csrf-token');
-  localStorage.removeItem('token'); // Legacy cleanup
+  localStorage.removeItem('token');
 }

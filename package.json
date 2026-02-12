@@ -13,10 +13,21 @@
     "dev": "turbo run dev --parallel",
     "build": "turbo run build",
     "test": "turbo run test",
-    "lint": "turbo run lint"
+    "lint": "turbo run lint",
+    "check:node": "node scripts/check-node-version.cjs",
+    "predev": "npm run check:node",
+    "prebuild": "npm run check:node",
+    "pretest": "npm run check:node",
+    "setup": "bash scripts/setup.sh",
+    "test:mvp": "bash tests/api/test-mvp-happy-path.sh",
+    "test:csrf": "bash tests/api/test-csrf-auth.sh"
   },
   "devDependencies": {
     "prisma": "^5.22.0",
     "turbo": "^2.0.0"
+  },
+  "engines": {
+    "node": ">=20.9.0",
+    "npm": ">=9"
   }
 }

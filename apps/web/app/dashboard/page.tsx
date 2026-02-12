@@ -7,6 +7,7 @@ import Link from 'next/link';
 import { api } from '@/lib/api';
 import type { Tool, RiskSummary } from '@/types';
 import { useKeyboardShortcuts, commonShortcuts } from '@/hooks/useKeyboardShortcuts';
+import { hasAuthSession } from '@/lib/auth';
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -21,15 +22,9 @@ export default function DashboardPage() {
   useEffect(() => {
     const loadData = async () => {
       try {
-        // Check for CSRF token (cookies are checked by server)
-        const csrfToken = localStorage.getItem('csrf-token');
-        if (!csrfToken) {
-          // Fallback: check for legacy token
-          const legacyToken = localStorage.getItem('token');
-          if (!legacyToken) {
-            router.push('/auth/login');
-            return;
-          }
+        if (!hasAuthSession()) {
+          router.push('/auth/login');
+          return;
         }
 
         // Check if onboarding is needed
