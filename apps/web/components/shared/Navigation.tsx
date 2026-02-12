@@ -4,6 +4,7 @@ import { usePathname } from 'next/navigation';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { ThemeToggle } from './ThemeToggle';
+import { clearAuth } from '@/lib/auth';
 
 export function Navigation() {
   const pathname = usePathname();
@@ -33,8 +34,7 @@ export function Navigation() {
       console.error('Logout error:', error);
     } finally {
       // Clear tokens anyway
-      localStorage.removeItem('csrf-token');
-      localStorage.removeItem('token');
+      clearAuth();
       router.push('/auth/login');
     }
   };

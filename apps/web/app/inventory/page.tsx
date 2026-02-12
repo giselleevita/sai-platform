@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 
 import { api } from '@/lib/api';
+import { hasAuthSession, getCsrfToken } from '@/lib/auth';
 import type { Tool } from '@/types';
 import { AppLayout } from '@/components/shared';
 
@@ -29,9 +30,7 @@ export default function InventoryPage() {
     try {
       setLoading(true);
       setError('');
-      // Check for CSRF token (cookies are checked by server)
-      const csrfToken = localStorage.getItem('csrf-token') || localStorage.getItem('token');
-      if (!csrfToken) {
+      if (!hasAuthSession()) {
         router.push('/auth/login');
         return;
       }
@@ -117,7 +116,7 @@ export default function InventoryPage() {
                   try {
                     setLoading(true);
                     const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
-                    const csrfToken = localStorage.getItem('csrf-token') || localStorage.getItem('token');
+                    const csrfToken = getCsrfToken();
                     const response = await fetch(`${API_URL}/api/import-export/tools/excel`, {
                       credentials: 'include',
                       headers: {

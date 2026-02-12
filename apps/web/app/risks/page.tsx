@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { api } from '@/lib/api';
+import { hasAuthSession } from '@/lib/auth';
 import { RiskBadge, AppLayout } from '@/components/shared';
 
 interface Risk {
@@ -59,9 +60,7 @@ export default function RisksPage() {
     try {
       setLoading(true);
       setError('');
-      // Check for CSRF token (cookies are checked by server)
-      const csrfToken = localStorage.getItem('csrf-token') || localStorage.getItem('token');
-      if (!csrfToken) {
+      if (!hasAuthSession()) {
         router.push('/auth/login');
         return;
       }
