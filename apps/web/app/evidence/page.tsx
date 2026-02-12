@@ -125,6 +125,8 @@ export default function EvidencePage() {
     statusFilter === 'All'
       ? evidence
       : evidence.filter((e) => e.status === statusFilter || (statusFilter === 'EXPIRED' && isExpired(e.validTo)));
+  const hasAnyEvidence = evidence.length > 0;
+  const isFilteredView = statusFilter !== 'All';
 
   if (loading) {
     return (
@@ -162,7 +164,15 @@ export default function EvidencePage() {
       <div className="max-w-7xl mx-auto py-12 px-4 sm:px-6 lg:px-8">
         {error && (
           <div className="mb-6 rounded-md bg-red-50 p-4">
-            <p className="text-sm font-medium text-red-800">{error}</p>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <p className="text-sm font-medium text-red-800">{error}</p>
+              <button
+                onClick={loadData}
+                className="inline-flex items-center rounded-md border border-red-200 bg-white px-3 py-1.5 text-xs font-medium text-red-700 hover:bg-red-50"
+              >
+                Retry
+              </button>
+            </div>
           </div>
         )}
 
@@ -188,13 +198,41 @@ export default function EvidencePage() {
         {/* Evidence Table */}
         {filteredEvidence.length === 0 ? (
           <div className="text-center py-12 bg-white rounded-lg shadow">
-            <p className="text-gray-500 text-lg mb-4">No evidence found</p>
-            <button
-              onClick={() => setShowCreateModal(true)}
-              className="text-blue-600 hover:text-blue-900 font-medium"
-            >
-              Add your first evidence
-            </button>
+            <h3 className="text-lg font-semibold text-gray-900">
+              {isFilteredView && hasAnyEvidence
+                ? `No ${statusFilter.replace('_', ' ')} evidence entries`
+                : 'No evidence records yet'}
+            </h3>
+            <p className="mt-2 text-sm text-gray-500">
+              {isFilteredView && hasAnyEvidence
+                ? 'Try switching to another status filter to review existing evidence.'
+                : 'Add evidence to controls so reviews and expiry tracking can begin.'}
+            </p>
+            <div className="mt-5 flex flex-col items-center justify-center gap-3 sm:flex-row">
+              {isFilteredView && hasAnyEvidence ? (
+                <button
+                  onClick={() => setStatusFilter('All')}
+                  className="inline-flex items-center rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                >
+                  Show all evidence
+                </button>
+              ) : (
+                <>
+                  <button
+                    onClick={() => setShowCreateModal(true)}
+                    className="inline-flex items-center rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+                  >
+                    Add your first evidence
+                  </button>
+                  <Link
+                    href="/controls"
+                    className="inline-flex items-center rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                  >
+                    Review controls
+                  </Link>
+                </>
+              )}
+            </div>
           </div>
         ) : (
           <div className="bg-white shadow overflow-hidden sm:rounded-md">
