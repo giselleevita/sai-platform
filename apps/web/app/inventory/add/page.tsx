@@ -4,8 +4,8 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { AppLayout } from '@/components/shared';
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+import { api } from '@/lib/api';
+import { hasAuthSession } from '@/lib/auth';
 
 const CATEGORIES = [
   'LLM',
@@ -94,8 +94,7 @@ export default function AddToolPage() {
     setLoading(true);
 
     try {
-      const token = localStorage.getItem('token');
-      if (!token) {
+      if (!hasAuthSession()) {
         router.push('/auth/login');
         return;
       }
@@ -117,19 +116,10 @@ export default function AddToolPage() {
         customFields: Object.keys(formData.customFields).length > 0 ? formData.customFields : undefined,
       };
 
-      const response = await fetch(`${API_URL}/api/inventory`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify(payload),
-      });
+      const result = await api.post('/api/inventory', payload);
 
-      const data = await response.json();
-
-      if (!response.ok) {
-        setError(data.error || 'Failed to add tool');
+      if (!result.success) {
+        setError(result.error || 'Failed to add tool');
         setLoading(false);
         return;
       }

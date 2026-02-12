@@ -140,6 +140,9 @@ npm run test
 # Run core MVP end-to-end smoke flow
 npm run test:mvp
 
+# Run CSRF/auth behavior smoke flow
+npm run test:csrf
+
 # Database management
 cd apps/api
 npm run db:studio    # Open Prisma Studio (database GUI)

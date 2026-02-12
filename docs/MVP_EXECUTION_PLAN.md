@@ -61,6 +61,7 @@ Acceptance criteria:
 - Documented steps produce one tool, one risk, one evidence item, one report.
 - API responses are valid and visible in UI.
 - Implemented smoke script: `tests/api/test-mvp-happy-path.sh`.
+- Documented UI walkthrough in `docs/MVP_HAPPY_PATH.md`.
 Dependencies/blockers: Milestone 1 complete.
 
 ### Issue M2-2: CSRF/auth usability smoke checks
@@ -68,6 +69,7 @@ Description: Ensure protected endpoints are usable from web app in default dev f
 Acceptance criteria:
 - Login obtains cookie/CSRF state correctly.
 - At least one protected write action succeeds from UI.
+- Automated CSRF behavior check exists: `tests/api/test-csrf-auth.sh` (`401` without CSRF, `201` with CSRF).
 Dependencies/blockers: M2-1.
 
 ### Issue M2-3: Minimal integration test script for core flow

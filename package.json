@@ -19,7 +19,8 @@
     "prebuild": "npm run check:node",
     "pretest": "npm run check:node",
     "setup": "bash scripts/setup.sh",
-    "test:mvp": "bash tests/api/test-mvp-happy-path.sh"
+    "test:mvp": "bash tests/api/test-mvp-happy-path.sh",
+    "test:csrf": "bash tests/api/test-csrf-auth.sh"
   },
   "devDependencies": {
     "prisma": "^5.22.0",
