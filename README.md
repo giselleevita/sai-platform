@@ -120,6 +120,7 @@ Access:
 - **[API Reference](docs/API_ROUTES_COMPLETE.md)** - Complete API endpoint documentation
 - **[Deployment](docs/DEPLOYMENT.md)** - Production deployment guide
 - **[CI/CD](docs/CI_CD.md)** - Continuous integration setup
+- **[MVP Release Notes](docs/RELEASE_NOTES_MVP.md)** - Delivered scope, known limits, and rollback notes
 
 All documentation is in the `docs/` directory.
 
