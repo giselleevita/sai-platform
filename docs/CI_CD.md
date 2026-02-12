@@ -27,9 +27,15 @@ This is the minimum reliable gate for MVP merges:
 - catches baseline automated test failures
 - keeps runtime consistent with local setup
 
+## Security Checks
+
+- **Pipeline file**: `.github/workflows/security.yml`
+- **Jobs**:
+  - `Dependency Audit`: fails on high/critical production dependency vulnerabilities (`npm audit --omit=dev --audit-level=high`)
+  - `Secret Scan`: runs `gitleaks` on every PR/push to `main`
+
 ## Merge Blocking Requirement
 
 To make failing checks block merges, GitHub branch protection or rulesets must be enabled for `main` and require the status check from this workflow.
 
 On the current repository plan, branch protection/rulesets API access returns `403` (feature unavailable), so enforcement must be configured in repository settings after plan upgrade or moving to a public repository.
-

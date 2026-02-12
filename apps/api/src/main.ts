@@ -1,6 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import cookieParser from 'cookie-parser';
+import helmet from 'helmet';
 import { config } from './config';
 import authRoutes from './routes/auth';
 import inventoryRoutes from './routes/inventory';
@@ -28,6 +29,7 @@ import { logger } from './utils';
 const app = express();
 
 // Middleware
+app.use(helmet());
 app.use(cors({ 
   origin: config.nodeEnv === 'production' ? config.cors.origin : true, // Allow all in dev
   credentials: true,

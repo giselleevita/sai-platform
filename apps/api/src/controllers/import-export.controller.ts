@@ -11,13 +11,12 @@ const upload = multer({
   fileFilter: (req, file, cb) => {
     const allowedTypes = [
       'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', // .xlsx
-      'application/vnd.ms-excel', // .xls
       'text/csv', // .csv
     ];
     if (allowedTypes.includes(file.mimetype)) {
       cb(null, true);
     } else {
-      cb(new Error('Invalid file type. Only Excel and CSV files are allowed.'));
+      cb(new Error('Invalid file type. Only .xlsx and .csv files are allowed.'));
     }
   },
 });
@@ -129,7 +128,8 @@ export class ImportExportController {
       const result = await ImportExportService.importRisksFromFile(
         companyId,
         actorId,
-        file.buffer
+        file.buffer,
+        file.originalname
       );
 
       res.json({ success: true, data: result });
