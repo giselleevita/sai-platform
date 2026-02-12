@@ -6,8 +6,8 @@ import { Response } from 'express';
 import { prisma } from './prisma.client';
 import { config } from '../config';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
-const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '7d';
+const JWT_SECRET = config.jwt.secret;
+const JWT_EXPIRES_IN = config.jwt.expiresIn;
 const REFRESH_TOKEN_DAYS = Number(process.env.REFRESH_TOKEN_DAYS || '30');
 const MFA_ISSUER = process.env.MFA_ISSUER || config.mfa.issuer || 'SAI Platform';
 const MFA_WINDOW = Number(process.env.MFA_WINDOW || config.mfa.window || 1);

@@ -1,7 +1,100 @@
-import * as XLSX from 'xlsx';
-import { prisma } from './prisma.client';
+import ExcelJS from 'exceljs';
 import { AIToolService } from './ai-tool.service';
 import { RiskService } from './risk.service';
+
+type ImportRow = Record<string, string>;
+
+function normalizeCellValue(value: unknown): string {
+  if (value === null || value === undefined) return '';
+  if (typeof value === 'object' && value !== null) {
+    if ('text' in (value as any) && typeof (value as any).text === 'string') {
+      return (value as any).text;
+    }
+    if ('richText' in (value as any) && Array.isArray((value as any).richText)) {
+      return (value as any).richText.map((part: any) => part?.text || '').join('');
+    }
+  }
+  return String(value).trim();
+}
+
+function parseBool(value: string): boolean {
+  const normalized = value.trim().toLowerCase();
+  return normalized === 'yes' || normalized === 'true' || normalized === '1';
+}
+
+function parseRowsFromWorksheet(worksheet: ExcelJS.Worksheet): ImportRow[] {
+  const rows: ImportRow[] = [];
+  let headers: string[] = [];
+
+  worksheet.eachRow({ includeEmpty: false }, (row, rowNumber) => {
+    const rawCells = Array.isArray(row.values) ? row.values.slice(1) : [];
+
+    if (rowNumber === 1) {
+      headers = rawCells.map((cell) => normalizeCellValue(cell));
+      return;
+    }
+
+    const record: ImportRow = {};
+    rawCells.forEach((cell, index) => {
+      const header = headers[index];
+      if (!header) return;
+      record[header] = normalizeCellValue(cell);
+    });
+    rows.push(record);
+  });
+
+  return rows;
+}
+
+async function parseRowsFromBuffer(fileBuffer: Buffer, filename: string): Promise<ImportRow[]> {
+  const lowerName = filename.toLowerCase();
+
+  if (lowerName.endsWith('.csv')) {
+    const content = fileBuffer.toString('utf-8');
+    const lines = content
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean);
+    if (lines.length === 0) return [];
+
+    const [headerLine, ...dataLines] = lines;
+    const headers = headerLine.split(',').map((header) => header.trim().replace(/^"|"$/g, ''));
+
+    return dataLines.map((line) => {
+      const values = line.split(',').map((value) => value.trim().replace(/^"|"$/g, ''));
+      const row: ImportRow = {};
+      headers.forEach((header, index) => {
+        if (header) {
+          row[header] = values[index] || '';
+        }
+      });
+      return row;
+    });
+  }
+
+  const workbook = new ExcelJS.Workbook();
+  await workbook.xlsx.load(fileBuffer as any);
+  const worksheet = workbook.worksheets[0];
+  if (!worksheet) {
+    return [];
+  }
+
+  return parseRowsFromWorksheet(worksheet);
+}
+
+async function buildWorkbookBuffer(
+  sheetName: string,
+  headers: string[],
+  rows: Array<Record<string, string | number>>
+): Promise<Buffer> {
+  const workbook = new ExcelJS.Workbook();
+  const worksheet = workbook.addWorksheet(sheetName);
+  worksheet.columns = headers.map((header) => ({ header, key: header, width: 24 }));
+  rows.forEach((row) => worksheet.addRow(row));
+
+  const output = await workbook.xlsx.writeBuffer();
+  return Buffer.isBuffer(output) ? output : Buffer.from(output);
+}
 
 export class ImportExportService {
   /**
@@ -13,8 +106,7 @@ export class ImportExportService {
     });
     const tools = result.data;
 
-    // Prepare data
-    const data = tools.map((tool) => ({
+    const rows = tools.map((tool) => ({
       Name: tool.name,
       Category: tool.category,
       Vendor: tool.vendor || '',
@@ -30,14 +122,25 @@ export class ImportExportService {
       'Updated At': tool.updatedAt.toISOString(),
     }));
 
-    // Create workbook
-    const workbook = XLSX.utils.book_new();
-    const worksheet = XLSX.utils.json_to_sheet(data);
-    XLSX.utils.book_append_sheet(workbook, worksheet, 'AI Tools');
-
-    // Generate buffer
-    const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
-    return buffer;
+    return buildWorkbookBuffer(
+      'AI Tools',
+      [
+        'Name',
+        'Category',
+        'Vendor',
+        'Description',
+        'Data Types',
+        'Users',
+        'Frequency',
+        'Risk Score',
+        'Risk Level',
+        'Has DPA',
+        'Data Residency',
+        'Created At',
+        'Updated At',
+      ],
+      rows
+    );
   }
 
   /**
@@ -49,11 +152,10 @@ export class ImportExportService {
     });
     const risks = result.data;
 
-    // Prepare data
-    const data = risks.map((risk: any) => ({
+    const rows = risks.map((risk: any) => ({
       Title: risk.title,
       Description: risk.description || '',
-      Category: risk.category,
+      Category: risk.category || '',
       Likelihood: risk.likelihood,
       Impact: risk.impact,
       'Risk Score': risk.likelihood * risk.impact,
@@ -61,14 +163,11 @@ export class ImportExportService {
       'Updated At': risk.updatedAt.toISOString(),
     }));
 
-    // Create workbook
-    const workbook = XLSX.utils.book_new();
-    const worksheet = XLSX.utils.json_to_sheet(data);
-    XLSX.utils.book_append_sheet(workbook, worksheet, 'Risks');
-
-    // Generate buffer
-    const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
-    return buffer;
+    return buildWorkbookBuffer(
+      'Risks',
+      ['Title', 'Description', 'Category', 'Likelihood', 'Impact', 'Risk Score', 'Created At', 'Updated At'],
+      rows
+    );
   }
 
   /**
@@ -80,35 +179,35 @@ export class ImportExportService {
     fileBuffer: Buffer,
     filename: string
   ): Promise<{ imported: number; failed: number; errors: string[] }> {
-    const workbook = XLSX.read(fileBuffer, { type: 'buffer' });
-    const sheetName = workbook.SheetNames[0];
-    const worksheet = workbook.Sheets[sheetName];
-    const data = XLSX.utils.sheet_to_json(worksheet);
+    const rows = await parseRowsFromBuffer(fileBuffer, filename);
 
     let imported = 0;
     let failed = 0;
     const errors: string[] = [];
 
-    for (const row of data as any[]) {
+    for (const [index, row] of rows.entries()) {
       try {
+        const dataTypes = (row['Data Types'] || row.dataTypes || 'Public')
+          .split(',')
+          .map((segment) => segment.trim())
+          .filter(Boolean);
+
         await AIToolService.createTool(companyId, {
           name: row.Name || row.name,
           category: row.Category || row.category || 'Other',
           vendor: row.Vendor || row.vendor,
           description: row.Description || row.description,
-          dataTypes: (row['Data Types'] || row.dataTypes || 'Public')
-            .split(',')
-            .map((s: string) => s.trim()),
+          dataTypes,
           users: parseInt(row.Users || row.users || '0', 10),
           frequency: row.Frequency || row.frequency || 'Rarely',
           controls: [],
-          hasDPA: row['Has DPA'] === 'Yes' || row.hasDPA === true,
+          hasDPA: parseBool(row['Has DPA'] || row.hasDPA || 'false'),
           dataResidency: row['Data Residency'] || row.dataResidency,
         });
         imported++;
       } catch (error: any) {
         failed++;
-        errors.push(`Row ${row.__rowNum__ || 'unknown'}: ${error.message}`);
+        errors.push(`Row ${index + 2}: ${error.message}`);
       }
     }
 
@@ -121,18 +220,16 @@ export class ImportExportService {
   static async importRisksFromFile(
     companyId: string,
     actorId: string,
-    fileBuffer: Buffer
+    fileBuffer: Buffer,
+    filename: string
   ): Promise<{ imported: number; failed: number; errors: string[] }> {
-    const workbook = XLSX.read(fileBuffer, { type: 'buffer' });
-    const sheetName = workbook.SheetNames[0];
-    const worksheet = workbook.Sheets[sheetName];
-    const data = XLSX.utils.sheet_to_json(worksheet);
+    const rows = await parseRowsFromBuffer(fileBuffer, filename);
 
     let imported = 0;
     let failed = 0;
     const errors: string[] = [];
 
-    for (const row of data as any[]) {
+    for (const [index, row] of rows.entries()) {
       try {
         await RiskService.create(companyId, actorId, {
           title: row.Title || row.title,
@@ -144,7 +241,7 @@ export class ImportExportService {
         imported++;
       } catch (error: any) {
         failed++;
-        errors.push(`Row ${row.__rowNum__ || 'unknown'}: ${error.message}`);
+        errors.push(`Row ${index + 2}: ${error.message}`);
       }
     }
 
