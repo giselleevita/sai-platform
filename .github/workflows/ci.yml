@@ -39,3 +39,6 @@ jobs:
 
       - name: Run minimal test suite
         run: npm run test
+
+      - name: Enforce CSRF security coverage gate
+        run: npm --workspace @sai/api run test:security

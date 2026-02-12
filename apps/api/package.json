@@ -8,6 +8,7 @@
     "build": "tsc",
     "start": "node dist/main.js",
     "test": "jest",
+    "test:security": "jest src/__tests__/csrf.middleware.test.ts src/__tests__/csrf.integration.test.ts --coverage --collectCoverageFrom=src/middleware/csrf.ts --coverageReporters=json-summary --coverageReporters=text-summary && node ../../scripts/check-security-coverage.cjs coverage/coverage-summary.json src/middleware/csrf.ts 90 84 100 90",
     "test:watch": "jest --watch",
     "postinstall": "prisma generate",
     "db:generate": "prisma generate",
