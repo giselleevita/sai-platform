@@ -34,6 +34,16 @@ This is the minimum reliable gate for MVP merges:
   - `Dependency Audit`: fails on high/critical production dependency vulnerabilities (`npm audit --omit=dev --audit-level=high`)
   - `Secret Scan`: runs `gitleaks` on every PR/push to `main`
 
+## Secure SDLC Automation
+
+- **CodeQL** (`.github/workflows/codeql.yml`)
+  - Static analysis on push/PR to `main`
+  - Weekly scheduled scan
+  - Runs in non-upload mode unless GitHub code scanning is enabled in repository settings
+- **Dependabot** (`.github/dependabot.yml`)
+  - Weekly npm dependency update PRs
+  - Weekly GitHub Actions update PRs
+
 ## Merge Blocking Requirement
 
 To make failing checks block merges, GitHub branch protection or rulesets must be enabled for `main` and require the status check from this workflow.
