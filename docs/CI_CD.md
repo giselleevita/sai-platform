@@ -59,6 +59,15 @@ This is the minimum reliable gate for MVP merges:
 - **Ownership**: `.github/CODEOWNERS`
   - Default owner coverage for all repository paths
 
+## Delivery Governance Templates
+
+- **PR template**: `.github/pull_request_template.md`
+  - Requires risk classification, verification evidence, and rollback plan
+- **Bug issue template**: `.github/ISSUE_TEMPLATE/bug_report.yml`
+  - Standardizes severity, reproduction steps, expected/actual behavior, and evidence
+- **Issue policy**: `.github/ISSUE_TEMPLATE/config.yml`
+  - Disables blank issues and routes security reports to private disclosure flow
+
 ## Merge Blocking Requirement
 
 To make failing checks block merges, GitHub branch protection or rulesets must be enabled for `main` and require the status check from this workflow.
