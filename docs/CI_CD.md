@@ -15,6 +15,7 @@ Steps:
 2. `npm run check:node`
 3. `npm run build`
 4. `npm run test`
+5. `npm --workspace @sai/api run test:security`
 
 Runtime:
 - Node version comes from `.nvmrc`
@@ -26,6 +27,8 @@ This is the minimum reliable gate for MVP merges:
 - catches compile/build regressions
 - catches baseline automated test failures
 - keeps runtime consistent with local setup
+- enforces high coverage on the CSRF middleware path
+  - enforced via `scripts/check-security-coverage.cjs` with hard thresholds
 
 ## Security Checks
 
