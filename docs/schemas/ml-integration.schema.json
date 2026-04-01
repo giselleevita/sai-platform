@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sai-platform.local/schemas/ml-integration.schema.json",
+  "title": "ML Integration",
+  "description": "Draft v1 schema for ML platform integration records.",
+  "type": "object",
+  "required": [
+    "provider",
+    "displayName"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "provider": {
+      "type": "string",
+      "enum": [
+        "MLFLOW",
+        "SAGEMAKER",
+        "VERTEX_AI",
+        "OTHER"
+      ]
+    },
+    "displayName": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "ACTIVE",
+        "DISABLED",
+        "ERROR"
+      ]
+    },
+    "config": {
+      "type": "object",
+      "description": "Provider-specific settings. Keys intentionally flexible in v1.",
+      "additionalProperties": true
+    },
+    "notes": {
+      "type": "string",
+      "maxLength": 2000
+    }
+  }
+}
