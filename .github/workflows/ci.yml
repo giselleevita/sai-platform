@@ -5,6 +5,7 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  workflow_dispatch:
 
 concurrency:
   group: quality-gate-${{ github.workflow }}-${{ github.ref }}
@@ -42,3 +43,23 @@ jobs:
 
       - name: Enforce CSRF security coverage gate
         run: npm --workspace @sai/api run test:security
+
+  docker-build:
+    name: Docker build (API + Web)
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: api
+            dockerfile: apps/api/Dockerfile
+            image: sai-api
+          - name: web
+            dockerfile: apps/web/Dockerfile
+            image: sai-web
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build image
+        run: docker build -f ${{ matrix.dockerfile }} -t ${{ matrix.image }}:ci .

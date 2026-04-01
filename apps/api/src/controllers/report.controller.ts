@@ -3,6 +3,7 @@ import { AuthenticatedRequest } from '../middleware/auth';
 import { prisma } from '../services/prisma.client';
 import { BadRequestError } from '../errors/AppError';
 import { PDFReportService, ReportOptions } from '../services/pdf-report.service';
+import { ReportExportService } from '../services/report-export.service';
 
 export class ReportController {
   /**
@@ -346,5 +347,20 @@ export class ReportController {
     } catch (error: any) {
       throw new BadRequestError(error?.message || 'Failed to delete scheduled report');
     }
+  }
+
+  /**
+   * GET /api/reports/compliance-export
+   * Export compliance package (PDF payload encoded in base64)
+   */
+  static async exportCompliance(req: AuthenticatedRequest, res: Response) {
+    const companyId = req.user?.companyId;
+    if (!companyId) {
+      res.status(401).json({ success: false, error: 'Unauthorized' });
+      return;
+    }
+
+    const data = await ReportExportService.exportCompliancePdf(companyId);
+    res.json({ success: true, data });
   }
 }

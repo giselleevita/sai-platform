@@ -3,7 +3,14 @@ import { authMiddleware, requirePermission, Permission } from '../middleware';
 import { asyncHandler } from '../utils';
 import { RiskController } from '../controllers';
 import { validate } from '../middleware/validation';
-import { createRiskSchema, updateRiskSchema, riskDecisionSchema, paginationSchema, searchSchema } from '../validation/schemas';
+import {
+  createRiskSchema,
+  updateRiskSchema,
+  riskDecisionSchema,
+  riskClassificationSchema,
+  paginationSchema,
+  searchSchema,
+} from '../validation/schemas';
 
 const router = Router();
 
@@ -37,6 +44,12 @@ router.post(
   requirePermission(Permission.RISK_DECISION),
   validate({ body: riskDecisionSchema }),
   asyncHandler(RiskController.addDecision)
+);
+router.post(
+  '/classify',
+  requirePermission(Permission.RISK_READ),
+  validate({ body: riskClassificationSchema }),
+  asyncHandler(RiskController.classify)
 );
 
 export default router;

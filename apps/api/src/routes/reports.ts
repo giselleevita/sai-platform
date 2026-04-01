@@ -29,6 +29,11 @@ router.get(
   requirePermission(Permission.REPORT_READ),
   asyncHandler(ReportController.generateCompliance)
 );
+router.get(
+  '/compliance-export',
+  requirePermission(Permission.REPORT_EXPORT),
+  asyncHandler(ReportController.exportCompliance)
+);
 
 /**
  * GET /api/reports/executive-summary

@@ -20,8 +20,12 @@ import activityRoutes from './routes/activity';
 import commentsRoutes from './routes/comments';
 import importExportRoutes from './routes/import-export';
 import webhooksRoutes from './routes/webhooks';
+import mlIntegrationRoutes from './routes/ml-integrations';
+import gpaiRoutes from './routes/gpai';
+import conformityRoutes from './routes/conformity';
 import { errorHandler } from './middleware';
 import { apiRateLimiter } from './middleware/rateLimit';
+import { securityAuditMiddleware } from './middleware/securityAudit';
 import { csrfProtection } from './middleware/csrf';
 import { requestLogger } from './middleware/requestLogger';
 import { logger } from './utils';
@@ -40,6 +44,7 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // Request logging (add request IDs)
 app.use(requestLogger);
+app.use(securityAuditMiddleware);
 
 // Rate limiting (apply to all routes)
 app.use('/api', apiRateLimiter);
@@ -61,6 +66,7 @@ app.get('/', (req, res) => {
       audit: '/api/audit',
       exceptions: '/api/exceptions',
       vendors: '/api/vendors',
+      mlIntegrations: '/api/ml-integrations',
     },
     timestamp: new Date().toISOString(),
   });
@@ -100,6 +106,9 @@ apiV1Routes.use('/activity', csrfProtection, activityRoutes);
 apiV1Routes.use('/comments', csrfProtection, commentsRoutes);
 apiV1Routes.use('/import-export', csrfProtection, importExportRoutes);
 apiV1Routes.use('/webhooks', csrfProtection, webhooksRoutes);
+apiV1Routes.use('/ml-integrations', csrfProtection, mlIntegrationRoutes);
+apiV1Routes.use('/gpai', csrfProtection, gpaiRoutes);
+apiV1Routes.use('/conformity', csrfProtection, conformityRoutes);
 
 // Mount v1 routes
 app.use('/api/v1', apiV1Routes);
@@ -122,6 +131,9 @@ app.use('/api/activity', csrfProtection, activityRoutes);
 app.use('/api/comments', csrfProtection, commentsRoutes);
 app.use('/api/import-export', csrfProtection, importExportRoutes);
 app.use('/api/webhooks', csrfProtection, webhooksRoutes);
+app.use('/api/ml-integrations', csrfProtection, mlIntegrationRoutes);
+app.use('/api/gpai', csrfProtection, gpaiRoutes);
+app.use('/api/conformity', csrfProtection, conformityRoutes);
 
 // Error handling middleware (must be last)
 app.use(errorHandler);

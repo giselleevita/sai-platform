@@ -48,6 +48,7 @@ model Company {
   createdAt           DateTime             @default(now())
   updatedAt           DateTime             @updatedAt
   aiTools             AITool[]
+  mlIntegrations      MLIntegration[]
   auditLogs           AuditLog[]
   complianceSnapshots ComplianceSnapshot[]
   controls            Control[]
@@ -102,6 +103,26 @@ model AITool {
   @@index([companyId])
   @@index([riskLevel])
   @@index([ownerId])
+  @@index([status])
+  @@index([deletedAt])
+}
+
+model MLIntegration {
+  id            String                 @id @default(cuid())
+  companyId     String
+  provider      MLIntegrationProvider
+  displayName   String
+  status        MLIntegrationStatus    @default(ACTIVE)
+  config        Json?
+  lastSyncedAt  DateTime?
+  notes         String?
+  createdAt     DateTime               @default(now())
+  updatedAt     DateTime               @updatedAt
+  deletedAt     DateTime?
+  company       Company                @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([companyId])
+  @@index([provider])
   @@index([status])
   @@index([deletedAt])
 }
@@ -516,6 +537,19 @@ enum IncidentStatus {
   ESCALATED
   RESOLVED
   REVIEWED
+}
+
+enum MLIntegrationProvider {
+  MLFLOW
+  SAGEMAKER
+  VERTEX_AI
+  OTHER
+}
+
+enum MLIntegrationStatus {
+  ACTIVE
+  DISABLED
+  ERROR
 }
 
 enum RiskDecisionType {
