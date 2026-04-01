@@ -1,3 +1,5 @@
+import { createHash } from 'crypto';
+
 import { AuditLogService } from './audit-log.service';
 import { prisma } from './prisma.client';
 import { PaginationParams, PaginatedResponse, getSkip, getPaginationMeta } from '../utils/pagination';
@@ -16,6 +18,23 @@ export interface CreateRiskInput {
 export interface DecisionInput {
   decision: 'ACCEPTED' | 'DEFERRED' | 'REJECTED';
   rationale?: string;
+}
+
+function buildDecisionLedgerEntry(companyId: string, riskId: string, actorId: string | undefined, input: DecisionInput) {
+  const recordedAt = new Date().toISOString();
+  const payload = JSON.stringify({
+    companyId,
+    riskId,
+    actorId: actorId || null,
+    decision: input.decision,
+    rationale: input.rationale || null,
+    recordedAt,
+  });
+
+  return {
+    recordedAt,
+    hash: createHash('sha256').update(payload).digest('hex'),
+  };
 }
 
 export class RiskService {
@@ -190,6 +209,7 @@ export class RiskService {
   }
 
   static async addDecision(companyId: string, actorId: string | undefined, riskId: string, input: DecisionInput) {
+    const ledger = buildDecisionLedgerEntry(companyId, riskId, actorId, input);
     const decision = await (prisma as any).decisionLog.create({
       data: {
         companyId,
@@ -197,6 +217,7 @@ export class RiskService {
         decision: input.decision,
         rationale: input.rationale,
         approvedBy: actorId,
+        immutable: true,
       },
     });
 
@@ -206,7 +227,10 @@ export class RiskService {
       action: 'risk.decision',
       targetType: 'DecisionLog',
       targetId: decision.id,
-      changes: input as any,
+      changes: {
+        ...input,
+        ledger,
+      } as any,
     });
 
     return decision;

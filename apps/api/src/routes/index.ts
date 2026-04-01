@@ -8,3 +8,6 @@ export { default as incidentRoutes } from './incidents';
 export { default as auditRoutes } from './audit';
 export { default as exceptionRoutes } from './exceptions';
 export { default as vendorRoutes } from './vendors';
+export { default as mlIntegrationRoutes } from './ml-integrations';
+export { default as gpaiRoutes } from './gpai';
+export { default as conformityRoutes } from './conformity';

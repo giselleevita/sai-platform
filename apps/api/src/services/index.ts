@@ -8,3 +8,7 @@ export { IncidentService } from './incident.service';
 export { AuditLogService } from './audit-log.service';
 export { ExceptionService } from './exception.service';
 export { VendorService } from './vendor.service';
+export { MLIntegrationService } from './ml-integration.service';
+export { GpaiService } from './gpai.service';
+export { ConformityService } from './conformity.service';
+export { ReportExportService } from './report-export.service';

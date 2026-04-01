@@ -14,3 +14,6 @@ export { ActivityController } from './activity.controller';
 export { CommentsController } from './comments.controller';
 export { ImportExportController } from './import-export.controller';
 export { WebhooksController } from './webhooks.controller';
+export { MLIntegrationController } from './ml-integration.controller';
+export { GpaiController } from './gpai.controller';
+export { ConformityController } from './conformity.controller';

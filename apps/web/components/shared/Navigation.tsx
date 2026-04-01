@@ -42,6 +42,9 @@ export function Navigation() {
   const navigationItems = [
     { name: 'Dashboard', href: '/dashboard', icon: '📊' },
     { name: 'Inventory', href: '/inventory', icon: '📦' },
+    { name: 'Systems', href: '/systems', icon: 'S' },
+    { name: 'Assess', href: '/assess', icon: 'A' },
+    { name: 'Timeline', href: '/timeline', icon: 'T' },
     {
       name: 'Governance',
       href: '/governance',

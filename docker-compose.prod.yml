@@ -1,0 +1,47 @@
+services:
+  postgres:
+    image: postgres:15-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-sai_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-sai_password}
+      POSTGRES_DB: ${POSTGRES_DB:-sai_db}
+    volumes:
+      - sai_postgres_data:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: ${DATABASE_URL:-postgresql://sai_user:sai_password@postgres:5432/sai_db}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+      LOG_FORMAT: ${LOG_FORMAT:-json}
+      SENTRY_DSN: ${SENTRY_DSN:-}
+    depends_on:
+      - postgres
+      - redis
+    ports:
+      - "3001:3001"
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-http://localhost:3001}
+    depends_on:
+      - api
+    ports:
+      - "3000:3000"
+
+volumes:
+  sai_postgres_data:

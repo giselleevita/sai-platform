@@ -51,6 +51,35 @@ export const createToolSchema = z.object({
 
 export const updateToolSchema = createToolSchema.partial();
 
+// ML Integration schemas
+export const createMLIntegrationSchema = z.object({
+  provider: z.enum(['MLFLOW', 'SAGEMAKER', 'VERTEX_AI', 'OTHER']),
+  displayName: z.string().min(1, 'Display name is required').max(200),
+  status: z.enum(['ACTIVE', 'DISABLED', 'ERROR']).optional(),
+  config: z.record(z.string(), z.any()).optional(),
+  notes: z.string().max(2000).optional(),
+});
+
+export const updateMLIntegrationSchema = createMLIntegrationSchema.partial();
+
+export const gpaiCreateSchema = z.object({
+  provider: z.enum(['MLFLOW', 'SAGEMAKER', 'VERTEX_AI', 'OTHER']),
+  displayName: z.string().min(1, 'Display name is required').max(200),
+  modelFamily: z.string().min(1, 'Model family is required').max(200),
+  transparencySummary: z.string().max(4000).optional(),
+  euDeclarationRef: z.string().max(200).optional(),
+  status: z.enum(['ACTIVE', 'DISABLED', 'ERROR']).optional(),
+});
+
+export const conformityAssessmentSchema = z.object({
+  systemName: z.string().min(1, 'System name is required').max(200),
+  euAiActTier: z.enum(['high-risk', 'limited-risk', 'minimal-risk']),
+  hasRiskManagement: z.boolean(),
+  hasTechnicalDocumentation: z.boolean(),
+  hasHumanOversight: z.boolean(),
+  hasMonitoringPlan: z.boolean(),
+});
+
 // Risk schemas
 export const createRiskSchema = z.object({
   title: z.string().min(1, 'Title is required').max(200),
@@ -67,6 +96,25 @@ export const updateRiskSchema = createRiskSchema.partial();
 export const riskDecisionSchema = z.object({
   decision: z.enum(['ACCEPTED', 'DEFERRED', 'REJECTED']),
   rationale: z.string().max(2000).optional(),
+});
+
+export const riskClassificationSchema = z.object({
+  systemName: z.string().min(1, 'System name is required').max(200),
+  domain: z.enum([
+    'biometric-identification',
+    'critical-infrastructure',
+    'education',
+    'employment',
+    'essential-services',
+    'law-enforcement',
+    'migration-border',
+    'justice-democracy',
+    'other',
+  ]),
+  hasBiometricIdentification: z.boolean().optional(),
+  isSafetyComponent: z.boolean().optional(),
+  impactsFundamentalRights: z.boolean().optional(),
+  userScale: z.number().int().min(0).optional(),
 });
 
 // Incident schemas

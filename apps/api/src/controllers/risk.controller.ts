@@ -1,6 +1,8 @@
 import { Response } from 'express';
 import { AuthenticatedRequest } from '../middleware/auth';
 import { RiskService } from '../services/risk.service';
+import { RiskClassifierService } from '../services/risk-classifier.service';
+import { WebhooksService } from '../services/webhooks.service';
 
 export class RiskController {
   static async list(req: AuthenticatedRequest, res: Response) {
@@ -68,5 +70,24 @@ export class RiskController {
     }
     const decision = await RiskService.addDecision(companyId, actorId, req.params.id, req.body);
     res.status(201).json({ success: true, data: decision });
+  }
+
+  static async classify(req: AuthenticatedRequest, res: Response) {
+    const companyId = req.user?.companyId;
+    if (!companyId) {
+      res.status(401).json({ success: false, error: 'Unauthorized' });
+      return;
+    }
+
+    const result = RiskClassifierService.classify(req.body);
+
+    // Best-effort webhook dispatch; classification response should not fail if webhook delivery fails.
+    void WebhooksService.triggerWebhook(companyId, 'compliance.risk.classified', {
+      systemName: result.systemName,
+      tier: result.euAiActTier,
+      score: result.score,
+    });
+
+    res.json({ success: true, data: result });
   }
 }

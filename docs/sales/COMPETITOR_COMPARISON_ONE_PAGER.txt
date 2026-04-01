@@ -1,0 +1,12 @@
+SAI Platform Competitor Comparison
+
+Against point compliance trackers
+- SAI adds workflow automation for risk classification and conformity closure.
+- SAI keeps evidence links attached to each decision event.
+
+Against spreadsheet-heavy internal process
+- SAI provides multi-tenant controls and deadline notification automation.
+- SAI reduces manual handoffs during audits.
+
+Winning claim
+- Faster path from AI system intake to audit-ready package with lower operational overhead.
