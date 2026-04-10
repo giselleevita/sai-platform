@@ -12,3 +12,4 @@ export { MLIntegrationService } from './ml-integration.service';
 export { GpaiService } from './gpai.service';
 export { ConformityService } from './conformity.service';
 export { ReportExportService } from './report-export.service';
+export { PricingService } from './pricing.service';

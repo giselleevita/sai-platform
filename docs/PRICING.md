@@ -23,3 +23,34 @@ Per AI system registered per year. This aligns pricing with the unit of complian
 - EU AI Act non-compliance fine: up to €35M or 7% of global annual turnover
 - Cost of manual compliance tracking for 20 AI systems: 1–2 FTE compliance analysts ($150K–$300K/year)
 - SAI Professional for 20 systems: $30,000/year — **80–90% cost reduction** vs. manual
+
+## Quote Operations API
+
+SAI pricing is also exposed as an internal sales-ops workflow through the backend API.
+
+- `POST /api/pricing/quote`
+	Creates an auditable quote request with pricing output and estimated annual value.
+- `GET /api/pricing/requests`
+	Lists aggregated quote requests with current lifecycle state.
+- `GET /api/pricing/requests/:id`
+	Returns the full quote record and lifecycle history for a single request.
+- `PATCH /api/pricing/requests/:id`
+	Updates quote ownership and pipeline state.
+
+### Lifecycle Stages
+
+- `REQUESTED`
+- `QUALIFIED`
+- `DISCOVERY`
+- `PILOT_PROPOSED`
+- `PILOT_ACTIVE`
+- `CLOSED_WON`
+- `CLOSED_LOST`
+
+### Operational Fields
+
+- `ownerId`: internal sales or solutions owner for the opportunity
+- `followUpAt`: next committed follow-up timestamp
+- `notes`: running commercial context for discovery, pilot, or close process
+
+The lifecycle is event-sourced through audit logs, which keeps pricing requests auditable and webhook-friendly without introducing a separate commercial datastore.

@@ -30,4 +30,57 @@ export class AuditLogService {
       take: 100,
     });
   }
+
+  static async listByAction(
+    companyId: string,
+    action: string,
+    targetType?: string,
+    take = 50
+  ) {
+    return prisma.auditLog.findMany({
+      where: {
+        companyId,
+        action,
+        ...(targetType ? { targetType } : {}),
+      },
+      orderBy: { createdAt: 'desc' },
+      take,
+    });
+  }
+
+  static async listByTarget(
+    companyId: string,
+    targetType: string,
+    targetId: string,
+    take = 100
+  ) {
+    return prisma.auditLog.findMany({
+      where: {
+        companyId,
+        targetType,
+        targetId,
+      },
+      orderBy: { createdAt: 'asc' },
+      take,
+    });
+  }
+
+  static async listByTargetIds(
+    companyId: string,
+    targetType: string,
+    targetIds: string[]
+  ) {
+    if (targetIds.length === 0) {
+      return [];
+    }
+
+    return prisma.auditLog.findMany({
+      where: {
+        companyId,
+        targetType,
+        targetId: { in: targetIds },
+      },
+      orderBy: [{ targetId: 'asc' }, { createdAt: 'asc' }],
+    });
+  }
 }

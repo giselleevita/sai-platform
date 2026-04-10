@@ -315,6 +315,7 @@ export class ReportController {
    */
   static async createScheduledReport(req: AuthenticatedRequest, res: Response) {
     const companyId = req.user?.companyId;
+    const actorId = req.user?.id;
     if (!companyId) {
       res.status(401).json({ success: false, error: 'Unauthorized' });
       return;
@@ -322,7 +323,7 @@ export class ReportController {
 
     try {
       const { ScheduledReportsService } = await import('../services/scheduled-reports.service');
-      const report = await ScheduledReportsService.createScheduledReport(companyId, req.body);
+      const report = await ScheduledReportsService.createScheduledReport(companyId, actorId, req.body);
       res.status(201).json({ success: true, data: report });
     } catch (error: any) {
       throw new BadRequestError(error?.message || 'Failed to create scheduled report');
@@ -335,6 +336,7 @@ export class ReportController {
    */
   static async deleteScheduledReport(req: AuthenticatedRequest, res: Response) {
     const companyId = req.user?.companyId;
+    const actorId = req.user?.id;
     if (!companyId) {
       res.status(401).json({ success: false, error: 'Unauthorized' });
       return;
@@ -342,7 +344,7 @@ export class ReportController {
 
     try {
       const { ScheduledReportsService } = await import('../services/scheduled-reports.service');
-      await ScheduledReportsService.deleteScheduledReport(req.params.id, companyId);
+      await ScheduledReportsService.deleteScheduledReport(req.params.id, companyId, actorId);
       res.json({ success: true });
     } catch (error: any) {
       throw new BadRequestError(error?.message || 'Failed to delete scheduled report');

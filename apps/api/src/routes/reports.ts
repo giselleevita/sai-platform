@@ -71,22 +71,22 @@ router.get(
 /**
  * POST /api/reports/scheduled
  * Create scheduled report
- * Requires: REPORT_READ
+ * Requires: REPORT_EXPORT (write operation)
  */
 router.post(
   '/scheduled',
-  requirePermission(Permission.REPORT_READ),
+  requirePermission(Permission.REPORT_EXPORT),
   asyncHandler(ReportController.createScheduledReport)
 );
 
 /**
  * DELETE /api/reports/scheduled/:id
  * Delete scheduled report
- * Requires: REPORT_READ
+ * Requires: REPORT_EXPORT (write operation)
  */
 router.delete(
   '/scheduled/:id',
-  requirePermission(Permission.REPORT_READ),
+  requirePermission(Permission.REPORT_EXPORT),
   asyncHandler(ReportController.deleteScheduledReport)
 );
 

@@ -49,6 +49,7 @@ export enum Permission {
 
   // Compliance permissions
   COMPLIANCE_READ = 'COMPLIANCE_READ',
+  COMPLIANCE_WRITE = 'COMPLIANCE_WRITE',
   COMPLIANCE_EXPORT = 'COMPLIANCE_EXPORT',
 
   // Reporting permissions
@@ -104,6 +105,7 @@ export const rolePermissions: Record<string, Permission[]> = {
     Permission.AUDITLOG_READ,
     Permission.AUDITLOG_EXPORT,
     Permission.COMPLIANCE_READ,
+    Permission.COMPLIANCE_WRITE,
     Permission.COMPLIANCE_EXPORT,
     Permission.REPORT_READ,
     Permission.REPORT_EXPORT,
@@ -147,6 +149,7 @@ export const rolePermissions: Record<string, Permission[]> = {
     Permission.AUDITLOG_READ,
     Permission.AUDITLOG_EXPORT,
     Permission.COMPLIANCE_READ,
+    Permission.COMPLIANCE_WRITE,
     Permission.COMPLIANCE_EXPORT,
     Permission.REPORT_READ,
     Permission.REPORT_EXPORT,
@@ -175,6 +178,7 @@ export const rolePermissions: Record<string, Permission[]> = {
     Permission.INCIDENT_WRITE,
     Permission.AUDITLOG_READ,
     Permission.COMPLIANCE_READ,
+    Permission.COMPLIANCE_WRITE,
     Permission.REPORT_READ,
     Permission.EXCEPTION_READ,
     Permission.EXCEPTION_WRITE,

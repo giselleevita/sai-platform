@@ -140,4 +140,14 @@ app.use(errorHandler);
 
 app.listen(config.port, () => {
   logger.info(`✅ API server running on http://localhost:${config.port}`);
+  
+  // Initialize scheduled reports for all companies
+  (async () => {
+    try {
+      const { ScheduledReportsService } = await import('./services/scheduled-reports.service');
+      await ScheduledReportsService.initializeAllCompanyReports();
+    } catch (error) {
+      logger.error('Failed to initialize scheduled reports on startup:', error);
+    }
+  })();
 });
