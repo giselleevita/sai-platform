@@ -15,6 +15,25 @@ export interface ActivityItem {
   metadata?: Record<string, any>;
 }
 
+const activityToTargetType: Record<ActivityItem['type'], string> = {
+  tool: 'AITool',
+  risk: 'Risk',
+  incident: 'Incident',
+  policy: 'Policy',
+  control: 'Control',
+  evidence: 'Evidence',
+};
+
+const targetTypeToActivity: Record<string, ActivityItem['type']> = {
+  aITool: 'tool',
+  tool: 'tool',
+  risk: 'risk',
+  incident: 'incident',
+  policy: 'policy',
+  control: 'control',
+  evidence: 'evidence',
+};
+
 export class ActivityFeedService {
   /**
    * Get activity feed for company
@@ -36,7 +55,7 @@ export class ActivityFeedService {
         companyId,
         createdAt: { gte: since },
         ...(options.type && {
-          targetType: options.type.toUpperCase() as any,
+          targetType: activityToTargetType[options.type] as any,
         }),
       },
       include: {
@@ -57,7 +76,7 @@ export class ActivityFeedService {
       .filter((log) => log.actor !== null && log.targetId !== null)
       .map((log) => {
         const action = this.mapAuditActionToActivity(log.action);
-        const type = log.targetType.toLowerCase() as ActivityItem['type'];
+        const type = this.mapTargetTypeToActivity(log.targetType);
 
         return {
           id: log.id,
@@ -89,7 +108,7 @@ export class ActivityFeedService {
     const auditLogs = await prisma.auditLog.findMany({
       where: {
         companyId,
-        targetType: targetType.toUpperCase(),
+        targetType: activityToTargetType[targetType as ActivityItem['type']] || targetType,
         targetId,
       },
       include: {
@@ -109,7 +128,7 @@ export class ActivityFeedService {
       .filter((log) => log.actor !== null && log.targetId !== null)
       .map((log) => ({
         id: log.id,
-        type: log.targetType.toLowerCase() as ActivityItem['type'],
+        type: this.mapTargetTypeToActivity(log.targetType),
         action: this.mapAuditActionToActivity(log.action),
         targetId: log.targetId!,
         targetName: (log as any).targetName || log.targetId || 'Unknown',
@@ -131,5 +150,9 @@ export class ActivityFeedService {
     if (action.includes('approve')) return 'approved';
     if (action.includes('reject')) return 'rejected';
     return 'updated';
+  }
+
+  private static mapTargetTypeToActivity(targetType: string): ActivityItem['type'] {
+    return targetTypeToActivity[targetType] || targetTypeToActivity[targetType.toLowerCase()] || 'tool';
   }
 }
