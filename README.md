@@ -126,6 +126,10 @@ All documentation is in the `docs/` directory.
 
 ## 🛠️ Development
 
+### CI (GitHub Actions)
+
+Pull requests and pushes to `main` run **Quality Gate** (workspace build, `npm test`, CSRF security gate) and **Sprint smoke** (Postgres service, `build:api`, `test:sprint`). To keep `main` healthy, enable **branch protection** in the repository settings: require both jobs **Build + Test (Node 20)** and **Sprint smoke (API + Postgres)** as required status checks before merge.
+
 ### Common Commands
 
 ```bash
