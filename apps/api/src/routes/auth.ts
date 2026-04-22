@@ -8,6 +8,18 @@ import { loginSchema, signupSchema } from '../validation/schemas';
 const router = Router();
 
 /**
+ * GET /api/auth/oidc/login
+ * Start enterprise SSO (OpenID Connect). Redirects to the identity provider.
+ */
+router.get('/oidc/login', authRateLimiter, asyncHandler(AuthController.oidcLogin));
+
+/**
+ * GET /api/auth/oidc/callback
+ * OAuth/OIDC redirect URI — sets session cookies and redirects to the web app.
+ */
+router.get('/oidc/callback', authRateLimiter, asyncHandler(AuthController.oidcCallback));
+
+/**
  * POST /api/auth/signup
  * Create new user and company
  */

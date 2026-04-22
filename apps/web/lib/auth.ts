@@ -30,6 +30,18 @@ export function getCsrfToken(): string | null {
 }
 
 /**
+ * After OIDC redirect the CSRF value is often only in the cookie; mirror it to localStorage
+ * so older code paths that only read localStorage still work.
+ */
+export function syncCsrfFromCookieToStorage(): void {
+  if (typeof window === 'undefined') return;
+  const fromCookie = getCookie('csrf-token');
+  if (fromCookie) {
+    localStorage.setItem('csrf-token', fromCookie);
+  }
+}
+
+/**
  * Check whether a user likely has an authenticated browser session.
  */
 export function hasAuthSession(): boolean {

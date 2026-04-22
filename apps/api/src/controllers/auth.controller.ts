@@ -5,6 +5,7 @@ import { AuthValidator } from '../validation/auth.validator';
 import { BadRequestError, UnauthorizedError } from '../errors/AppError';
 import { logger } from '../utils/logger';
 import { generateCsrfToken } from '../middleware/csrf';
+import { OidcService } from '../services/oidc.service';
 
 export class AuthController {
   /**
@@ -64,6 +65,59 @@ export class AuthController {
    * POST /api/auth/login
    * Login user
    */
+  /**
+   * GET /api/auth/oidc/login — redirect to enterprise IdP (requires OIDC_* env).
+   */
+  static async oidcLogin(_req: Request, res: Response) {
+    if (!OidcService.isEnabled()) {
+      res.status(503).json({
+        success: false,
+        error: 'OIDC SSO is not configured. Set OIDC_ISSUER, OIDC_CLIENT_ID, OIDC_CLIENT_SECRET, and OIDC_REDIRECT_URI.',
+      });
+      return;
+    }
+    await OidcService.startLogin(res);
+  }
+
+  /**
+   * GET /api/auth/oidc/callback — OAuth redirect target; sets session cookies and redirects to the app.
+   */
+  static async oidcCallback(req: Request, res: Response) {
+    try {
+      if (!OidcService.isEnabled()) {
+        res.status(503).send('OIDC SSO is not configured.');
+        return;
+      }
+
+      const claims = await OidcService.handleCallback(req, res);
+      const result = await AuthService.completeOidcLogin(claims);
+
+      AuthService.setTokenCookie(res as any, result.token, result.refreshToken, result.refreshTokenExpiresAt);
+
+      const csrfToken = generateCsrfToken();
+      const isProduction = process.env.NODE_ENV === 'production';
+      res.cookie('csrf-token', csrfToken, {
+        httpOnly: false,
+        secure: isProduction,
+        sameSite: isProduction ? 'strict' : 'lax',
+        maxAge: 7 * 24 * 60 * 60 * 1000,
+        path: '/',
+      });
+
+      const target = process.env.FRONTEND_URL || 'http://localhost:3000';
+      const redirect = new URL('/dashboard', target.replace(/\/$/, ''));
+      redirect.searchParams.set('oidc', '1');
+      res.redirect(redirect.toString());
+    } catch (error) {
+      logger.error('OIDC callback error:', error);
+      const target = process.env.FRONTEND_URL || 'http://localhost:3000';
+      const redirect = new URL('/login', target.replace(/\/$/, ''));
+      redirect.searchParams.set('error', 'oidc_failed');
+      redirect.searchParams.set('message', (error as Error).message || 'OIDC sign-in failed');
+      res.redirect(redirect.toString());
+    }
+  }
+
   static async login(req: Request, res: Response) {
     try {
       const { email, password, mfaCode, recoveryCode } = req.body;
