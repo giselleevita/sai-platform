@@ -43,8 +43,8 @@ export class ActivityController {
 
     const { type, id } = req.params;
 
-    if (!['tool', 'risk', 'incident'].includes(type)) {
-      throw new BadRequestError('Invalid type. Must be tool, risk, or incident');
+    if (!['tool', 'risk', 'incident', 'policy', 'control', 'evidence'].includes(type)) {
+      throw new BadRequestError('Invalid type. Must be tool, risk, incident, policy, control, or evidence');
     }
 
     const activities = await ActivityFeedService.getItemActivity(
