@@ -11,7 +11,8 @@ model User {
   id               String           @id @default(cuid())
   email            String           @unique
   name             String
-  password         String
+  /// Null when the user only signs in via OIDC / SSO (no local password).
+  password         String?
   role             UserRole         @default(OPERATOR)
   mfaEnabled       Boolean          @default(false)
   mfaSecret        String?
@@ -34,9 +35,23 @@ model User {
   ownedRisks       Risk[]           @relation("RiskOwner")
   comments         Comment[]        @relation("CommentAuthor")
   company          Company?         @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  oauthAccounts    OAuthAccount[]
 
   @@index([email])
   @@index([companyId])
+}
+
+/// Links a user to an external IdP subject (OIDC issuer + sub).
+model OAuthAccount {
+  id        String   @id @default(cuid())
+  provider  String
+  subject   String
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([provider, subject])
+  @@index([userId])
 }
 
 model Company {
@@ -68,6 +83,7 @@ model Company {
   vendors             Vendor[]
   comments            Comment[]
   webhooks            Webhook[]
+  scheduledReports    ScheduledReport[]
 
   @@index([email])
 }
@@ -595,4 +611,23 @@ model Webhook {
 
   @@index([companyId])
   @@index([active])
+}
+
+model ScheduledReport {
+  id         String   @id @default(cuid())
+  companyId  String
+  name       String
+  type       String
+  schedule   String
+  options    Json
+  recipients String[]
+  enabled    Boolean  @default(true)
+  lastRun    DateTime?
+  nextRun    DateTime?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  company    Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([companyId])
+  @@index([enabled])
 }
