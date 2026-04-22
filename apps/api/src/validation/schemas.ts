@@ -80,6 +80,20 @@ export const conformityAssessmentSchema = z.object({
   hasMonitoringPlan: z.boolean(),
 });
 
+/** PATCH /api/inventory/:id/governance — persisted under AITool.customFields.toolGovernance.profile */
+export const toolGovernancePatchSchema = z
+  .object({
+    decisionStatus: z.string().max(500).optional(),
+    decisionOwner: z.string().max(500).optional(),
+    decisionOwnerRole: z.string().max(500).optional(),
+    decisionRationale: z.string().max(4000).optional(),
+    decisionExpiresAt: z.string().max(100).optional(),
+    reviewDate: z.string().max(100).optional(),
+    applicablePolicies: z.array(z.string()).optional(),
+    complianceStatus: z.string().max(500).optional(),
+  })
+  .strict();
+
 // Risk schemas
 export const createRiskSchema = z.object({
   title: z.string().min(1, 'Title is required').max(200),
@@ -136,7 +150,7 @@ export const updateIncidentSchema = createIncidentSchema.partial();
 export const createPolicySchema = z.object({
   name: z.string().min(1, 'Name is required').max(200),
   description: z.string().max(2000).optional(),
-  status: z.enum(['DRAFT', 'ACTIVE', 'DEPRECATED']).default('DRAFT'),
+  status: z.enum(['DRAFT', 'ACTIVE', 'UNDER_REVIEW', 'RETIRED', 'DEPRECATED']).default('DRAFT'),
   ownerId: z.string().optional(),
   approverId: z.string().optional(),
   reviewerId: z.string().optional(),
@@ -149,7 +163,7 @@ export const createControlSchema = z.object({
   name: z.string().min(1, 'Name is required').max(200),
   description: z.string().max(2000).optional(),
   policyId: z.string().optional(),
-  status: z.enum(['DRAFT', 'ACTIVE', 'DEPRECATED']).default('DRAFT'),
+  status: z.enum(['DRAFT', 'ACTIVE', 'UNDER_REVIEW', 'RETIRED', 'DEPRECATED']).default('DRAFT'),
   ownerId: z.string().optional(),
   approverId: z.string().optional(),
   reviewerId: z.string().optional(),
@@ -157,13 +171,31 @@ export const createControlSchema = z.object({
 
 export const updateControlSchema = createControlSchema.partial();
 
+export const createProcedureSchema = z.object({
+  controlId: z.string().min(1, 'Control ID is required'),
+  name: z.string().min(1, 'Name is required').max(200),
+  steps: z.record(z.string(), z.any()).optional(),
+});
+
+export const updateProcedureSchema = createProcedureSchema.partial();
+
+export const createRegulationSchema = z.object({
+  framework: z.string().min(1, 'Framework is required').max(100),
+  article: z.string().max(100).optional(),
+  name: z.string().min(1, 'Name is required').max(200),
+  description: z.string().max(2000).optional(),
+});
+
+export const updateRegulationSchema = createRegulationSchema.partial();
+
 // Evidence schemas
 export const createEvidenceSchema = z.object({
   controlId: z.string().min(1, 'Control ID is required'),
-  name: z.string().min(1, 'Name is required').max(200),
-  description: z.string().max(2000).optional(),
-  url: z.string().url('Invalid URL').optional().or(z.literal('')),
-  status: z.enum(['PENDING', 'APPROVED', 'REJECTED']).default('PENDING'),
+  source: z.string().min(1, 'Source is required').max(200).optional(),
+  reference: z.string().max(1000).optional(),
+  status: z
+    .enum(['PENDING', 'REJECTED', 'MISSING', 'SUBMITTED', 'APPROVED', 'EXPIRED'])
+    .default('SUBMITTED'),
 });
 
 export const updateEvidenceSchema = createEvidenceSchema.partial();

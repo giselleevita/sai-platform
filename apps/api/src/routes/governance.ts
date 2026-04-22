@@ -2,6 +2,17 @@ import { Router } from 'express';
 import { authMiddleware, requirePermission, Permission } from '../middleware';
 import { asyncHandler } from '../utils';
 import { GovernanceController } from '../controllers';
+import { validate } from '../middleware/validation';
+import {
+  createControlSchema,
+  createPolicySchema,
+  createProcedureSchema,
+  createRegulationSchema,
+  updateControlSchema,
+  updatePolicySchema,
+  updateProcedureSchema,
+  updateRegulationSchema,
+} from '../validation/schemas';
 
 const router = Router();
 
@@ -12,11 +23,13 @@ router.get('/policies', requirePermission(Permission.POLICY_READ), asyncHandler(
 router.post(
   '/policies',
   requirePermission(Permission.POLICY_WRITE),
+  validate({ body: createPolicySchema }),
   asyncHandler(GovernanceController.createPolicy)
 );
 router.patch(
   '/policies/:id',
   requirePermission(Permission.POLICY_WRITE),
+  validate({ body: updatePolicySchema }),
   asyncHandler(GovernanceController.updatePolicy)
 );
 router.delete(
@@ -30,11 +43,13 @@ router.get('/controls', requirePermission(Permission.CONTROL_READ), asyncHandler
 router.post(
   '/controls',
   requirePermission(Permission.CONTROL_WRITE),
+  validate({ body: createControlSchema }),
   asyncHandler(GovernanceController.createControl)
 );
 router.patch(
   '/controls/:id',
   requirePermission(Permission.CONTROL_WRITE),
+  validate({ body: updateControlSchema }),
   asyncHandler(GovernanceController.updateControl)
 );
 router.delete(
@@ -48,11 +63,13 @@ router.get('/procedures', requirePermission(Permission.PROCEDURE_READ), asyncHan
 router.post(
   '/procedures',
   requirePermission(Permission.PROCEDURE_WRITE),
+  validate({ body: createProcedureSchema }),
   asyncHandler(GovernanceController.createProcedure)
 );
 router.patch(
   '/procedures/:id',
   requirePermission(Permission.PROCEDURE_WRITE),
+  validate({ body: updateProcedureSchema }),
   asyncHandler(GovernanceController.updateProcedure)
 );
 router.delete(
@@ -66,11 +83,13 @@ router.get('/regulations', requirePermission(Permission.REGULATION_READ), asyncH
 router.post(
   '/regulations',
   requirePermission(Permission.REGULATION_WRITE),
+  validate({ body: createRegulationSchema }),
   asyncHandler(GovernanceController.createRegulation)
 );
 router.patch(
   '/regulations/:id',
   requirePermission(Permission.REGULATION_WRITE),
+  validate({ body: updateRegulationSchema }),
   asyncHandler(GovernanceController.updateRegulation)
 );
 router.delete(

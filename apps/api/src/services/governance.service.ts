@@ -1,36 +1,185 @@
+import { randomUUID } from 'crypto';
 import { prisma } from './prisma.client';
 import { AuditLogService } from './audit-log.service';
+import { NotFoundError } from '../errors/AppError';
+import { normalizeLifecycleStatus } from './status-normalization.service';
 
 // Type definition for LifecycleStatus (temporary until Prisma client is regenerated)
 type LifecycleStatus = 'DRAFT' | 'ACTIVE' | 'UNDER_REVIEW' | 'RETIRED';
 
+/** Persisted under AITool.customFields.toolGovernance — Risk-scoped DecisionLog remains separate. */
+const TOOL_GOVERNANCE_KEY = 'toolGovernance';
+
+export type ToolGovernanceProfile = {
+  decisionStatus?: string;
+  decisionOwner?: string;
+  decisionOwnerRole?: string;
+  decisionRationale?: string;
+  decisionExpiresAt?: string;
+  reviewDate?: string;
+  applicablePolicies?: string[];
+  complianceStatus?: string;
+};
+
+type ToolDecisionLogEntry = {
+  id: string;
+  decision: string;
+  rationale?: string | null;
+  ownerId?: string | null;
+  createdAt: string;
+};
+
+type ToolGovernanceStorage = {
+  profile?: ToolGovernanceProfile;
+  decisionLogs?: ToolDecisionLogEntry[];
+};
+
+const PROFILE_KEYS = new Set([
+  'decisionStatus',
+  'decisionOwner',
+  'decisionOwnerRole',
+  'decisionRationale',
+  'decisionExpiresAt',
+  'reviewDate',
+  'applicablePolicies',
+  'complianceStatus',
+]);
+
+function parseCustomFields(raw: unknown): Record<string, unknown> {
+  if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
+    return { ...(raw as Record<string, unknown>) };
+  }
+  return {};
+}
+
+function getToolGovernanceStorage(customFields: unknown): ToolGovernanceStorage {
+  const root = parseCustomFields(customFields);
+  const raw = root[TOOL_GOVERNANCE_KEY];
+  if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
+    return raw as ToolGovernanceStorage;
+  }
+  return {};
+}
+
+function pickProfileFields(data: Record<string, unknown>): ToolGovernanceProfile {
+  const out: ToolGovernanceProfile = {};
+  for (const key of PROFILE_KEYS) {
+    if (!(key in data) || data[key] === undefined) continue;
+    const v = data[key];
+    if (key === 'applicablePolicies') {
+      if (Array.isArray(v)) {
+        out.applicablePolicies = v.filter((x): x is string => typeof x === 'string');
+      }
+      continue;
+    }
+    if (typeof v === 'string') {
+      (out as Record<string, string>)[key] = v;
+    }
+  }
+  return out;
+}
+
+function mergeGovernanceIntoCustomFields(
+  customFields: unknown,
+  nextStorage: ToolGovernanceStorage,
+): Record<string, unknown> {
+  const root = parseCustomFields(customFields);
+  return {
+    ...root,
+    [TOOL_GOVERNANCE_KEY]: nextStorage,
+  };
+}
+
 export class GovernanceFlowService {
-  // Note: ToolGovernance and ToolDecisionLog models were removed from schema
-  // These methods are stubbed out - governance data should be stored differently
-  static async getGovernance(toolId: string, companyId: string): Promise<any | null> {
+  /**
+   * Returns persisted governance profile for the tool, or null if none stored.
+   * Stored in `AITool.customFields.toolGovernance.profile` (JSON).
+   */
+  static async getGovernance(toolId: string, companyId: string): Promise<ToolGovernanceProfile | null> {
     const tool = await prisma.aITool.findFirst({ where: { id: toolId, companyId } });
     if (!tool) return null;
-    // Return null for now - governance data structure needs to be redefined
-    return null;
+    const { profile } = getToolGovernanceStorage(tool.customFields);
+    if (!profile || Object.keys(profile).length === 0) return null;
+    return profile;
   }
 
-  static async upsertGovernance(toolId: string, data: any) {
-    // Stub - governance upsert needs to be reimplemented
-    throw new Error('Governance upsert not implemented - models removed from schema');
+  /**
+   * Merge profile fields into stored tool governance (tenant-scoped).
+   */
+  static async upsertGovernance(
+    toolId: string,
+    companyId: string,
+    data: Record<string, unknown>,
+  ): Promise<ToolGovernanceProfile> {
+    const tool = await prisma.aITool.findFirst({ where: { id: toolId, companyId } });
+    if (!tool) {
+      throw new NotFoundError('Tool not found');
+    }
+    const storage = getToolGovernanceStorage(tool.customFields);
+    const patch = pickProfileFields(data);
+    const profile: ToolGovernanceProfile = { ...(storage.profile ?? {}), ...patch };
+    const nextCustom = mergeGovernanceIntoCustomFields(tool.customFields, {
+      ...storage,
+      profile,
+    });
+    await prisma.aITool.update({
+      where: { id: toolId },
+      data: { customFields: nextCustom as object },
+    });
+    return profile;
   }
 
-  static async listDecisionLogs(toolId: string, companyId: string): Promise<any[]> {
+  /**
+   * Decision history for the AI tool (free-form strings). Stored in custom JSON, not the Risk `DecisionLog` table.
+   */
+  static async listDecisionLogs(toolId: string, companyId: string): Promise<ToolDecisionLogEntry[]> {
     const tool = await prisma.aITool.findFirst({ where: { id: toolId, companyId } });
     if (!tool) return [];
-    // Return empty array - decision logs need to use DecisionLog model instead
-    return [];
+    const { decisionLogs = [] } = getToolGovernanceStorage(tool.customFields);
+    return [...decisionLogs].sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
   }
 
-  static async addDecisionLog(toolId: string, companyId: string, input: { decision: string; rationale?: string; ownerId?: string }) {
-    const tool = await prisma.aITool.findFirst({ where: { id: toolId, companyId } });
-    if (!tool) throw new Error('Tool not found');
-    // Stub - decision logs should use DecisionLog model instead
-    throw new Error('Decision log creation not implemented - use DecisionLog model instead');
+  static async addDecisionLog(
+    toolId: string,
+    companyId: string,
+    input: { decision: string; rationale?: string; ownerId?: string },
+  ): Promise<ToolDecisionLogEntry> {
+    const entry: ToolDecisionLogEntry = {
+      id: randomUUID(),
+      decision: input.decision,
+      rationale: input.rationale ?? null,
+      ownerId: input.ownerId ?? null,
+      createdAt: new Date().toISOString(),
+    };
+
+    const log = await prisma.$transaction(async (tx) => {
+      const tool = await tx.aITool.findFirst({ where: { id: toolId, companyId } });
+      if (!tool) {
+        throw new NotFoundError('Tool not found');
+      }
+      const storage = getToolGovernanceStorage(tool.customFields);
+      const decisionLogs = [...(storage.decisionLogs ?? []), entry];
+      const nextCustom = mergeGovernanceIntoCustomFields(tool.customFields, {
+        ...storage,
+        decisionLogs,
+      });
+      await tx.aITool.update({
+        where: { id: toolId },
+        data: { customFields: nextCustom as object },
+      });
+      return entry;
+    });
+
+    await AuditLogService.log({
+      companyId,
+      actorId: input.ownerId,
+      action: 'inventory.tool.decisionLog.create',
+      targetType: 'AITool',
+      targetId: toolId,
+      changes: { decision: input.decision, rationale: input.rationale },
+    });
+
+    return log;
   }
 }
 
@@ -76,7 +225,11 @@ export class GovernanceService {
 
   static async createPolicy(companyId: string, actorId: string | undefined, input: CreatePolicyInput) {
     const policy = await (prisma as any).policy.create({
-      data: { ...input, companyId } as any,
+      data: {
+        ...input,
+        status: normalizeLifecycleStatus(input.status) || undefined,
+        companyId,
+      } as any,
     });
 
     await AuditLogService.log({
@@ -94,7 +247,10 @@ export class GovernanceService {
   static async updatePolicy(companyId: string, actorId: string | undefined, id: string, input: Partial<CreatePolicyInput>) {
     const policy = await (prisma as any).policy.update({
       where: { id, companyId },
-      data: input,
+      data: {
+        ...input,
+        ...(input.status !== undefined && { status: normalizeLifecycleStatus(input.status) }),
+      },
     });
 
     await AuditLogService.log({
@@ -132,7 +288,11 @@ export class GovernanceService {
 
   static async createControl(companyId: string, actorId: string | undefined, input: CreateControlInput) {
     const control = await (prisma as any).control.create({
-      data: { ...input, companyId } as any,
+      data: {
+        ...input,
+        status: normalizeLifecycleStatus(input.status) || undefined,
+        companyId,
+      } as any,
     });
 
     await AuditLogService.log({
@@ -150,7 +310,10 @@ export class GovernanceService {
   static async updateControl(companyId: string, actorId: string | undefined, id: string, input: Partial<CreateControlInput>) {
     const control = await (prisma as any).control.update({
       where: { id, companyId },
-      data: input,
+      data: {
+        ...input,
+        ...(input.status !== undefined && { status: normalizeLifecycleStatus(input.status) }),
+      },
     });
 
     await AuditLogService.log({

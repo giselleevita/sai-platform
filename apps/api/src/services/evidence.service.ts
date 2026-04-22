@@ -1,12 +1,11 @@
-import { PrismaClient } from '@prisma/client';
 import { AuditLogService } from './audit-log.service';
-
-const prisma = new PrismaClient();
+import { prisma } from './prisma.client';
+import { normalizeEvidenceStatus } from './status-normalization.service';
 
 export interface CreateEvidenceInput {
   controlId: string;
   source: string;
-  status?: 'MISSING' | 'SUBMITTED' | 'APPROVED' | 'EXPIRED';
+  status?: string;
   validFrom?: string;
   validTo?: string;
   reference?: string;
@@ -28,7 +27,7 @@ export class EvidenceService {
         companyId,
         controlId: input.controlId,
         source: input.source,
-        status: input.status,
+        status: normalizeEvidenceStatus(input.status),
         validFrom: input.validFrom ? new Date(input.validFrom) : undefined,
         validTo: input.validTo ? new Date(input.validTo) : undefined,
         reference: input.reference,
@@ -54,7 +53,7 @@ export class EvidenceService {
       data: {
         controlId: input.controlId,
         source: input.source,
-        status: input.status,
+        status: normalizeEvidenceStatus(input.status),
         validFrom: input.validFrom ? new Date(input.validFrom) : undefined,
         validTo: input.validTo ? new Date(input.validTo) : undefined,
         reference: input.reference,
