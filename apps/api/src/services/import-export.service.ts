@@ -1,4 +1,5 @@
 import ExcelJS from 'exceljs';
+import { parse } from 'csv-parse/sync';
 import { AIToolService } from './ai-tool.service';
 import { RiskService } from './risk.service';
 
@@ -51,23 +52,18 @@ async function parseRowsFromBuffer(fileBuffer: Buffer, filename: string): Promis
 
   if (lowerName.endsWith('.csv')) {
     const content = fileBuffer.toString('utf-8');
-    const lines = content
-      .split(/\r?\n/)
-      .map((line) => line.trim())
-      .filter(Boolean);
-    if (lines.length === 0) return [];
+    const records = parse(content, {
+      columns: true,
+      skip_empty_lines: true,
+      relax_column_count: true,
+      trim: true,
+    }) as Record<string, unknown>[];
 
-    const [headerLine, ...dataLines] = lines;
-    const headers = headerLine.split(',').map((header) => header.trim().replace(/^"|"$/g, ''));
-
-    return dataLines.map((line) => {
-      const values = line.split(',').map((value) => value.trim().replace(/^"|"$/g, ''));
+    return records.map((record) => {
       const row: ImportRow = {};
-      headers.forEach((header, index) => {
-        if (header) {
-          row[header] = values[index] || '';
-        }
-      });
+      for (const [key, value] of Object.entries(record)) {
+        row[key] = normalizeCellValue(value);
+      }
       return row;
     });
   }

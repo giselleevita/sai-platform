@@ -486,8 +486,9 @@ Total: 30 + 15 + 15 - 10 - 5 = 45 points → "Medium" risk
 - `GET /api/audit` - Query audit log
 
 ### Integrations
-- `POST /api/integrations/slack` - Connect Slack
-- `POST /api/integrations/siem` - Configure SIEM export
+- `GET /api/webhooks` - List webhook subscriptions
+- `POST /api/webhooks` - Create outbound webhook
+- `DELETE /api/webhooks/:id` - Remove webhook subscription
 
 ### Vendors
 - `GET /api/vendors` - List vendors
@@ -629,9 +630,9 @@ const result = calculateRiskScore({
 - Vendor and category risk heatmaps
 
 ### 8. **Integrations**
-- SSO (SAML/OIDC)
-- SIEM and ticketing exports
-- Slack/Teams notifications for high-risk changes
+- SSO (OIDC)
+- Outbound webhooks for change events
+- Email notifications for high-risk changes and scheduled reports
 
 ### 9. **Compliance Mapping**
 - Map tool controls to ISO/SOC2/GDPR requirements
@@ -706,7 +707,7 @@ npm run dev
 - Real-time notifications for high-risk tools
 - Automated compliance checks
 - Integration with security tools
-- **Advanced Reporting & Analytics** (Coming Soon):
+- **Advanced Reporting & Analytics**:
   - Custom report builder with drag-and-drop interface
   - Scheduled report generation (daily, weekly, monthly)
   - PDF export with charts, graphs, and executive summaries
