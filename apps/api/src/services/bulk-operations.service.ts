@@ -15,9 +15,14 @@ export class BulkOperationsService {
 
     for (const toolId of toolIds) {
       try {
-        await prisma.aITool.delete({
+        const result = await prisma.aITool.updateMany({
           where: { id: toolId, companyId },
+          data: { deletedAt: new Date() },
         });
+        if (!result.count) {
+          failed++;
+          continue;
+        }
 
         await AuditLogService.log({
           companyId,
@@ -49,9 +54,14 @@ export class BulkOperationsService {
 
     for (const riskId of riskIds) {
       try {
-        await (prisma as any).risk.delete({
+        const result = await (prisma as any).risk.updateMany({
           where: { id: riskId, companyId },
+          data: { deletedAt: new Date() },
         });
+        if (!result.count) {
+          failed++;
+          continue;
+        }
 
         await AuditLogService.log({
           companyId,
@@ -85,7 +95,7 @@ export class BulkOperationsService {
     for (const toolId of toolIds) {
       try {
         await prisma.aITool.update({
-          where: { id: toolId, companyId },
+          where: { id: toolId, companyId, deletedAt: null } as any,
           data: updates,
         });
 
@@ -122,7 +132,7 @@ export class BulkOperationsService {
     for (const riskId of riskIds) {
       try {
         await (prisma as any).risk.update({
-          where: { id: riskId, companyId },
+          where: { id: riskId, companyId, deletedAt: null },
           data: updates,
         });
 
