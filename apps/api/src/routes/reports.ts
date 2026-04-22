@@ -80,6 +80,17 @@ router.post(
 );
 
 /**
+ * PATCH /api/reports/scheduled/:id
+ * Update scheduled report
+ * Requires: REPORT_READ
+ */
+router.patch(
+  '/scheduled/:id',
+  requirePermission(Permission.REPORT_READ),
+  asyncHandler(ReportController.updateScheduledReport)
+);
+
+/**
  * DELETE /api/reports/scheduled/:id
  * Delete scheduled report
  * Requires: REPORT_EXPORT (write operation)

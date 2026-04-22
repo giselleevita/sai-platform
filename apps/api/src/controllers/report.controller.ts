@@ -331,6 +331,26 @@ export class ReportController {
   }
 
   /**
+   * Update scheduled report
+   * PATCH /api/reports/scheduled/:id
+   */
+  static async updateScheduledReport(req: AuthenticatedRequest, res: Response) {
+    const companyId = req.user?.companyId;
+    if (!companyId) {
+      res.status(401).json({ success: false, error: 'Unauthorized' });
+      return;
+    }
+
+    try {
+      const { ScheduledReportsService } = await import('../services/scheduled-reports.service');
+      const report = await ScheduledReportsService.updateScheduledReport(req.params.id, companyId, req.body);
+      res.json({ success: true, data: report });
+    } catch (error: any) {
+      throw new BadRequestError(error?.message || 'Failed to update scheduled report');
+    }
+  }
+
+  /**
    * Delete scheduled report
    * DELETE /api/reports/scheduled/:id
    */
