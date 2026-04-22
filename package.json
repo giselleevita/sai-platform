@@ -12,6 +12,7 @@
   "scripts": {
     "dev": "turbo run dev --parallel",
     "build": "turbo run build",
+    "build:api": "turbo run build --filter=@sai/api...",
     "test": "turbo run test",
     "lint": "turbo run lint",
     "check:node": "node scripts/check-node-version.cjs",
@@ -20,7 +21,10 @@
     "pretest": "npm run check:node",
     "setup": "bash scripts/setup.sh",
     "test:mvp": "bash tests/api/test-mvp-happy-path.sh",
-    "test:csrf": "bash tests/api/test-csrf-auth.sh"
+    "test:csrf": "bash tests/api/test-csrf-auth.sh",
+    "test:sprint": "bash tests/api/test-sprint-smoke.sh",
+    "test:api-smoke": "npm run build:api && npm run test:sprint",
+    "test:sprint:local": "bash scripts/sprint-smoke-local.sh"
   },
   "devDependencies": {
     "prisma": "^5.22.0",

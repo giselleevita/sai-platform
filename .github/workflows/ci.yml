@@ -44,6 +44,86 @@ jobs:
       - name: Enforce CSRF security coverage gate
         run: npm --workspace @sai/api run test:security
 
+  sprint-smoke:
+    name: Sprint smoke (API + Postgres)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      DATABASE_URL: postgresql://sai_user:sai_password@localhost:5432/sai_db
+      JWT_SECRET: ci-test-jwt-secret-min-32-chars-for-hs256!!
+      NODE_ENV: development
+      PORT: '3001'
+      NEXT_TELEMETRY_DISABLED: '1'
+
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_USER: sai_user
+          POSTGRES_PASSWORD: sai_password
+          POSTGRES_DB: sai_db
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U sai_user -d sai_db"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Validate runtime version
+        run: npm run check:node
+
+      - name: Build API and dependencies only
+        run: npm run build:api
+
+      - name: Prisma migrate deploy
+        working-directory: apps/api
+        run: npx prisma migrate deploy
+
+      - name: Start API (background)
+        working-directory: apps/api
+        run: |
+          set -euo pipefail
+          nohup node dist/main.js > /tmp/sai-api.log 2>&1 &
+          echo $! > /tmp/sai-api.pid
+          for i in $(seq 1 90); do
+            if curl -sf "http://127.0.0.1:${PORT}/health" >/dev/null; then
+              echo "API is up (attempt $i)"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "API failed to become healthy within 90s"
+          cat /tmp/sai-api.log || true
+          exit 1
+
+      - name: Sprint smoke script
+        run: npm run test:sprint
+
+      - name: Stop API
+        if: always()
+        run: |
+          if [ -f /tmp/sai-api.pid ]; then
+            kill "$(cat /tmp/sai-api.pid)" 2>/dev/null || true
+          fi
+          if [ -f /tmp/sai-api.log ]; then
+            echo "---- API log (tail) ----"
+            tail -n 80 /tmp/sai-api.log || true
+          fi
+
   docker-build:
     name: Docker build (API + Web)
     runs-on: ubuntu-latest
@@ -57,6 +137,7 @@ jobs:
           - name: web
             dockerfile: apps/web/Dockerfile
             image: sai-web
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
