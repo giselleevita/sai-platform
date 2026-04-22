@@ -7,7 +7,7 @@ import Link from 'next/link';
 import { api } from '@/lib/api';
 import type { Tool, RiskSummary } from '@/types';
 import { useKeyboardShortcuts, commonShortcuts } from '@/hooks/useKeyboardShortcuts';
-import { hasAuthSession } from '@/lib/auth';
+import { hasAuthSession, syncCsrfFromCookieToStorage } from '@/lib/auth';
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -20,6 +20,26 @@ export default function DashboardPage() {
   // Keyboard shortcuts
   useKeyboardShortcuts(commonShortcuts(router));
 
+  /** After SSO, confirm session and strip `?oidc=1` from the URL bar. */
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('oidc') !== '1') return;
+
+    syncCsrfFromCookieToStorage();
+
+    void (async () => {
+      const me = await api.get('/api/auth/me');
+      if (!me.success) {
+        router.push('/auth/login');
+        return;
+      }
+      const url = new URL(window.location.href);
+      url.searchParams.delete('oidc');
+      window.history.replaceState({}, '', url.pathname + (url.search ? url.search : ''));
+    })();
+  }, [router]);
+
   useEffect(() => {
     const loadData = async () => {
       try {
@@ -27,6 +47,8 @@ export default function DashboardPage() {
           router.push('/auth/login');
           return;
         }
+
+        syncCsrfFromCookieToStorage();
 
         // Check if onboarding is needed
         const onboardingCompleted = localStorage.getItem('onboarding_completed');

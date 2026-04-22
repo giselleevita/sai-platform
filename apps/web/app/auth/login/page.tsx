@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { api } from '@/lib/api';
@@ -9,6 +9,23 @@ export default function LoginPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [oidcEnabled, setOidcEnabled] = useState(false);
+
+  useEffect(() => {
+    fetch(`${api.baseUrl}/api/health/oidc`, { credentials: 'include' })
+      .then((r) => (r.ok ? r.json() : { oidcEnabled: false }))
+      .then((d: { oidcEnabled?: boolean }) => setOidcEnabled(!!d.oidcEnabled))
+      .catch(() => setOidcEnabled(false));
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('error') === 'oidc_failed') {
+      const msg = params.get('message') || 'SSO sign-in failed.';
+      setError(msg);
+    }
+  }, []);
 
   const [formData, setFormData] = useState({
     email: '',
@@ -75,6 +92,28 @@ export default function LoginPage() {
             Sign in to manage your AI tools
           </p>
         </div>
+
+        {oidcEnabled && (
+          <div className="space-y-3">
+            <button
+              type="button"
+              onClick={() => {
+                window.location.href = `${api.baseUrl}/api/auth/oidc/login`;
+              }}
+              className="w-full flex justify-center py-2 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-800 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+            >
+              Sign in with SSO
+            </button>
+            <div className="relative">
+              <div className="absolute inset-0 flex items-center" aria-hidden="true">
+                <div className="w-full border-t border-gray-200" />
+              </div>
+              <div className="relative flex justify-center text-xs uppercase">
+                <span className="bg-gray-50 px-2 text-gray-500">Or continue with email</span>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Form */}
         <form onSubmit={handleSubmit} className="space-y-6">

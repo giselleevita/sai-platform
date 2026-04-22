@@ -68,4 +68,14 @@ export const config = {
     issuer: process.env.MFA_ISSUER || 'SAI Platform',
     window: Number(process.env.MFA_WINDOW || '1'),
   },
+  oidc: {
+    issuer: process.env.OIDC_ISSUER?.trim(),
+    clientId: process.env.OIDC_CLIENT_ID?.trim(),
+    clientSecret: process.env.OIDC_CLIENT_SECRET?.trim(),
+    redirectUri: process.env.OIDC_REDIRECT_URI?.trim(),
+    /** When true, first OIDC login creates a company + user if no account exists. */
+    jitProvisioning: process.env.OIDC_JIT_PROVISIONING === 'true',
+    /** Optional: require email to end with this domain (e.g. @acme.com). */
+    allowedEmailDomain: process.env.OIDC_ALLOWED_EMAIL_DOMAIN?.trim().toLowerCase(),
+  },
 } as const;

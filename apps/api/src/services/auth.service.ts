@@ -278,8 +278,12 @@ export class AuthService {
       include: { company: true },
     });
 
-    if (!user || !user.company || !user.password) {
+    if (!user || !user.company) {
       throw new Error('Invalid email or password');
+    }
+
+    if (!user.password) {
+      throw new Error('This account uses SSO. Sign in with your organization login.');
     }
 
     const isValid = await this.comparePassword(input.password, user.password);
@@ -421,6 +425,159 @@ export class AuthService {
     });
 
     return { disabled: true };
+  }
+
+  /**
+   * Issue access + refresh tokens after successful authentication (password or OIDC).
+   */
+  static async issueSessionForUser(user: {
+    id: string;
+    email: string;
+    name: string;
+    role: string;
+    mfaEnabled: boolean;
+    company: { id: string; name: string; email: string };
+  }) {
+    const token = this.generateToken({
+      id: user.id,
+      email: user.email,
+      companyId: user.company.id,
+      role: user.role,
+    });
+    const refreshToken = await this.createRefreshToken(user.id);
+
+    return {
+      token,
+      refreshToken: refreshToken.token,
+      refreshTokenExpiresAt: refreshToken.expiresAt,
+      user: {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        role: user.role,
+        mfaEnabled: user.mfaEnabled,
+      },
+      company: {
+        id: user.company.id,
+        name: user.company.name,
+        email: user.company.email,
+      },
+    };
+  }
+
+  /**
+   * Complete OpenID Connect login: link or create user, then issue session.
+   */
+  static async completeOidcLogin(params: {
+    issuerUrl: string;
+    subject: string;
+    email: string;
+    name: string;
+  }) {
+    const provider = `oidc:${params.issuerUrl}`;
+    const email = params.email.trim().toLowerCase();
+
+    const domainRule = config.oidc.allowedEmailDomain;
+    if (domainRule) {
+      const suffix = domainRule.startsWith('@') ? domainRule : `@${domainRule}`;
+      if (!email.endsWith(suffix.toLowerCase())) {
+        throw new Error(`Email must use the allowed domain ${suffix}`);
+      }
+    }
+
+    const linked = await prisma.oAuthAccount.findUnique({
+      where: {
+        provider_subject: {
+          provider,
+          subject: params.subject,
+        },
+      },
+      include: {
+        user: { include: { company: true } },
+      },
+    });
+
+    if (linked?.user?.company) {
+      return this.issueSessionForUser({
+        id: linked.user.id,
+        email: linked.user.email,
+        name: linked.user.name,
+        role: linked.user.role,
+        mfaEnabled: linked.user.mfaEnabled,
+        company: linked.user.company,
+      });
+    }
+
+    const existingUser = await prisma.user.findUnique({
+      where: { email },
+      include: { company: true },
+    });
+
+    if (existingUser?.company) {
+      await prisma.oAuthAccount.create({
+        data: {
+          provider,
+          subject: params.subject,
+          userId: existingUser.id,
+        },
+      });
+
+      return this.issueSessionForUser({
+        id: existingUser.id,
+        email: existingUser.email,
+        name: existingUser.name,
+        role: existingUser.role,
+        mfaEnabled: existingUser.mfaEnabled,
+        company: existingUser.company,
+      });
+    }
+
+    if (!config.oidc.jitProvisioning) {
+      throw new Error(
+        'No account found for this email. Ask an admin to invite you, or enable OIDC JIT provisioning.',
+      );
+    }
+
+    const companyEmail = email;
+    const companyName = `${email.split('@')[1] ?? 'organization'} (SSO)`;
+
+    const created = await prisma.$transaction(async (tx) => {
+      const company = await tx.company.create({
+        data: {
+          name: companyName,
+          email: companyEmail,
+        },
+      });
+
+      const user = await tx.user.create({
+        data: {
+          email,
+          name: params.name,
+          password: null,
+          companyId: company.id,
+          role: 'MANAGEMENT',
+        },
+      });
+
+      await tx.oAuthAccount.create({
+        data: {
+          provider,
+          subject: params.subject,
+          userId: user.id,
+        },
+      });
+
+      return { user, company };
+    });
+
+    return this.issueSessionForUser({
+      id: created.user.id,
+      email: created.user.email,
+      name: created.user.name,
+      role: created.user.role,
+      mfaEnabled: created.user.mfaEnabled,
+      company: created.company,
+    });
   }
 
   /**
