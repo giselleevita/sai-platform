@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 
@@ -8,6 +8,7 @@ import { api } from '@/lib/api';
 import type { Tool, RiskSummary } from '@/types';
 import { useKeyboardShortcuts, commonShortcuts } from '@/hooks/useKeyboardShortcuts';
 import { hasAuthSession, syncCsrfFromCookieToStorage } from '@/lib/auth';
+import { LoadingSpinner, MetricCard, PageHeader } from '@/components/shared';
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -16,6 +17,7 @@ export default function DashboardPage() {
   const [summary, setSummary] = useState<RiskSummary | null>(null);
   const [error, setError] = useState('');
   const [reloadKey, setReloadKey] = useState(0);
+  const [showTourCta, setShowTourCta] = useState(false);
 
   // Keyboard shortcuts
   useKeyboardShortcuts(commonShortcuts(router));
@@ -50,10 +52,11 @@ export default function DashboardPage() {
 
         syncCsrfFromCookieToStorage();
 
-        // Check if onboarding is needed
-        const onboardingCompleted = localStorage.getItem('onboarding_completed');
-        if (!onboardingCompleted && tools.length === 0) {
-          // Don't redirect immediately, let user see dashboard first
+        try {
+          const onboardingCompleted = localStorage.getItem('onboarding_completed');
+          setShowTourCta(!onboardingCompleted);
+        } catch {
+          // ignore
         }
 
         // Fetch tools (limited for dashboard)
@@ -100,135 +103,171 @@ export default function DashboardPage() {
     }
   };
 
-  // Check for onboarding
-  useEffect(() => {
-    const onboardingCompleted = localStorage.getItem('onboarding_completed');
-    if (!onboardingCompleted && !loading && tools.length === 0) {
-      // Show onboarding prompt
-      const shouldShow = confirm('Welcome! Would you like to take a quick tour of the platform?');
-      if (shouldShow) {
-        router.push('/onboarding');
-      } else {
-        localStorage.setItem('onboarding_completed', 'true');
-      }
+  const attentionTools = useMemo(() => {
+    const ranked = [...tools].sort((a, b) => (b.riskScore || 0) - (a.riskScore || 0));
+    return ranked.filter((t) => t.riskLevel === 'Critical' || t.riskLevel === 'High').slice(0, 5);
+  }, [tools]);
+
+  const exportAuditPackage = async () => {
+    const res = await api.get<any>('/api/reports/audit-package');
+    if (!res.success) {
+      setError(res.error || 'Failed to export audit package');
+      return;
     }
-  }, [loading, tools.length, router]);
+    const payload = JSON.stringify(res.data, null, 2);
+    const blob = new Blob([payload], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `audit-package-${new Date().toISOString().slice(0, 10)}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto"></div>
-          <p className="mt-4 text-gray-600">Loading dashboard...</p>
-        </div>
-      </div>
-    );
+    return <LoadingSpinner />;
   }
 
   return (
     <>
-      {/* Header */}
-      <div className="bg-white shadow">
-        <div className="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center">
-            <h1 className="text-3xl font-bold text-gray-900">SAI Dashboard</h1>
-            {!localStorage.getItem('onboarding_completed') && (
+      <PageHeader
+        title="Overview"
+        subtitle="Executive posture across inventory, risk, and compliance."
+        right={
+          <>
+            {showTourCta ? (
               <Link
                 href="/onboarding"
-                className="text-sm text-blue-600 hover:text-blue-900 font-medium"
+                className="rounded-md border border-gray-300 dark:border-gray-800 bg-white dark:bg-gray-900 px-3 py-2 text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800"
               >
-                Take Tour →
+                Take tour
               </Link>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* Main content */}
-      <div className="max-w-7xl mx-auto py-12 px-4 sm:px-6 lg:px-8">
-        {error && (
-          <div className="mb-6 rounded-md bg-red-50 p-4">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <p className="text-sm font-medium text-red-800">{error}</p>
-              <button
-                onClick={() => {
-                  setError('');
-                  setReloadKey((key) => key + 1);
-                }}
-                className="inline-flex items-center rounded-md border border-red-200 bg-white px-3 py-1.5 text-xs font-medium text-red-700 hover:bg-red-50"
-              >
-                Retry
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* Risk Summary Cards */}
-        {summary && (
-          <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-5 mb-8">
-            <div className="bg-white overflow-hidden shadow rounded-lg">
-              <div className="px-4 py-5 sm:p-6">
-                <dt className="text-sm font-medium text-gray-500 truncate">Total Tools</dt>
-                <dd className="mt-1 text-3xl font-extrabold text-gray-900">
-                  {summary.totalTools}
-                </dd>
-              </div>
-            </div>
-
-            <div className="bg-white overflow-hidden shadow rounded-lg">
-              <div className="px-4 py-5 sm:p-6">
-                <dt className="text-sm font-medium text-red-500 truncate">Critical Risk</dt>
-                <dd className="mt-1 text-3xl font-extrabold text-red-600">
-                  {summary.riskCounts.critical}
-                </dd>
-              </div>
-            </div>
-
-            <div className="bg-white overflow-hidden shadow rounded-lg">
-              <div className="px-4 py-5 sm:p-6">
-                <dt className="text-sm font-medium text-orange-500 truncate">High Risk</dt>
-                <dd className="mt-1 text-3xl font-extrabold text-orange-600">
-                  {summary.riskCounts.high}
-                </dd>
-              </div>
-            </div>
-
-            <div className="bg-white overflow-hidden shadow rounded-lg">
-              <div className="px-4 py-5 sm:p-6">
-                <dt className="text-sm font-medium text-yellow-500 truncate">Medium Risk</dt>
-                <dd className="mt-1 text-3xl font-extrabold text-yellow-600">
-                  {summary.riskCounts.medium}
-                </dd>
-              </div>
-            </div>
-
-            <div className="bg-white overflow-hidden shadow rounded-lg">
-              <div className="px-4 py-5 sm:p-6">
-                <dt className="text-sm font-medium text-gray-500 truncate">Avg Risk Score</dt>
-                <dd className="mt-1 text-3xl font-extrabold text-gray-900">
-                  {summary.averageRiskScore}
-                </dd>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Tools Section */}
-        <div className="bg-white shadow rounded-lg">
-          <div className="px-4 py-5 sm:px-6 flex justify-between items-center">
-            <h2 className="text-lg font-medium text-gray-900">AI Tools Inventory</h2>
+            ) : null}
             <Link
               href="/inventory/add"
-              className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700"
+              className="rounded-md bg-blue-600 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-700"
             >
-              Add Tool
+              Add tool
+            </Link>
+            <button
+              type="button"
+              onClick={() => void exportAuditPackage()}
+              className="rounded-md border border-gray-300 dark:border-gray-800 bg-white dark:bg-gray-900 px-3 py-2 text-sm font-semibold text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800"
+            >
+              Export audit package
+            </button>
+          </>
+        }
+      />
+
+      {/* Main content */}
+      <div className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8 space-y-8">
+        {error && (
+          <div className="rounded-md bg-red-50 border border-red-200 p-4 text-sm text-red-800 flex items-center justify-between gap-3">
+            <span className="min-w-0">{error}</span>
+            <button
+              type="button"
+              onClick={() => {
+                setError('');
+                setReloadKey((key) => key + 1);
+              }}
+              className="shrink-0 rounded-md border border-red-200 bg-white px-3 py-2 text-xs font-semibold text-red-700 hover:bg-red-50"
+            >
+              Retry
+            </button>
+          </div>
+        )}
+
+        <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+          <MetricCard title="Total tools" value={summary?.totalTools ?? '—'} />
+          <MetricCard title="Critical" value={summary?.riskCounts?.critical ?? '—'} />
+          <MetricCard title="High" value={summary?.riskCounts?.high ?? '—'} />
+          <MetricCard title="Medium" value={summary?.riskCounts?.medium ?? '—'} />
+          <MetricCard title="Avg risk score" value={summary?.averageRiskScore ?? '—'} />
+        </section>
+
+        <section className="grid gap-4 lg:grid-cols-3">
+          <div className="lg:col-span-2 rounded-lg border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-4 shadow-sm">
+            <div className="flex items-center justify-between gap-3">
+              <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">Needs attention</h2>
+              <Link href="/risks" className="text-sm font-medium text-blue-600 hover:text-blue-700">
+                Open risk register
+              </Link>
+            </div>
+            <div className="mt-3 space-y-2">
+              {attentionTools.length === 0 ? (
+                <div className="text-sm text-gray-600 dark:text-gray-300">
+                  No critical/high tools in the current top list.
+                </div>
+              ) : (
+                attentionTools.map((t) => (
+                  <div
+                    key={t.id}
+                    className="flex items-center justify-between gap-3 rounded-md border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-950 px-3 py-2"
+                  >
+                    <div className="min-w-0">
+                      <div className="truncate text-sm font-medium text-gray-900 dark:text-gray-100">{t.name}</div>
+                      <div className="text-xs text-gray-600 dark:text-gray-400">
+                        {t.category} · score {t.riskScore}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span
+                        className={[
+                          'px-2 py-1 text-xs font-semibold rounded-full',
+                          getRiskColor(t.riskLevel),
+                        ].join(' ')}
+                      >
+                        {t.riskLevel}
+                      </span>
+                      <Link href={`/inventory/${t.id}`} className="text-sm font-medium text-blue-600 hover:text-blue-700">
+                        View
+                      </Link>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+
+          <div className="rounded-lg border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-4 shadow-sm space-y-3">
+            <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">Quick paths</h2>
+            <div className="grid gap-2">
+              <Link
+                href="/inventory"
+                className="rounded-md border border-gray-200 dark:border-gray-800 px-3 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800"
+              >
+                Inventory
+              </Link>
+              <Link
+                href="/compliance"
+                className="rounded-md border border-gray-200 dark:border-gray-800 px-3 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800"
+              >
+                Compliance snapshots
+              </Link>
+              <Link
+                href="/integrations/evidentia"
+                className="rounded-md border border-gray-200 dark:border-gray-800 px-3 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800"
+              >
+                Integrations
+              </Link>
+            </div>
+          </div>
+        </section>
+
+        {/* Tools Section */}
+        <section className="rounded-lg border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 shadow-sm">
+          <div className="px-4 py-4 sm:px-6 flex items-center justify-between gap-3 border-b border-gray-200 dark:border-gray-800">
+            <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">Top tools (sample)</h2>
+            <Link href="/inventory" className="text-sm font-medium text-blue-600 hover:text-blue-700">
+              Open inventory →
             </Link>
           </div>
 
           {tools.length === 0 ? (
             <div className="px-4 py-12 sm:px-6 text-center">
-              <h3 className="text-lg font-semibold text-gray-900">No AI tools yet</h3>
-              <p className="mt-2 text-sm text-gray-500">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">No tools yet</h3>
+              <p className="mt-2 text-sm text-gray-600 dark:text-gray-300">
                 Add your first tool to unlock risk scoring, inventory tracking, and reporting.
               </p>
               <div className="mt-5 flex flex-col items-center justify-center gap-3 sm:flex-row">
@@ -248,8 +287,8 @@ export default function DashboardPage() {
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
+              <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-800">
+                <thead className="bg-gray-50 dark:bg-gray-950">
                   <tr>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Name
@@ -274,16 +313,16 @@ export default function DashboardPage() {
                     </th>
                   </tr>
                 </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
+                <tbody className="bg-white dark:bg-gray-900 divide-y divide-gray-200 dark:divide-gray-800">
                   {tools.map((tool) => (
                     <tr key={tool.id}>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-gray-100">
                         {tool.name}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
                         {tool.category}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
                         {tool.users}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
@@ -295,10 +334,10 @@ export default function DashboardPage() {
                           {tool.riskLevel}
                         </span>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
                         {tool.riskScore}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
                         {tool.dataTypes.join(', ')}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
@@ -315,29 +354,7 @@ export default function DashboardPage() {
               </table>
             </div>
           )}
-
-          {/* Recent Activity */}
-          <div className="mt-8">
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-xl font-bold text-gray-900">Recent Activity</h2>
-              <Link
-                href="/activity"
-                className="text-sm text-blue-600 hover:text-blue-900 font-medium"
-              >
-                View All →
-              </Link>
-            </div>
-            <div className="bg-white rounded-lg shadow p-4">
-              <p className="text-sm text-gray-600">
-                View all recent changes and updates in the{' '}
-                <Link href="/activity" className="text-blue-600 hover:text-blue-900 font-medium">
-                  Activity Feed
-                </Link>
-                .
-              </p>
-            </div>
-          </div>
-        </div>
+        </section>
       </div>
     </>
   );

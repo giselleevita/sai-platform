@@ -1,7 +1,8 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { AppLayout } from '@/components/shared';
+import Link from 'next/link';
+import { AppLayout, MetricCard, PageHeader } from '@/components/shared';
 import { api } from '@/lib/api';
 
 type ApiComplianceSnapshot = {
@@ -23,6 +24,7 @@ export default function CompliancePage() {
   const [rows, setRows] = useState<ApiComplianceSnapshot[]>([]);
 
   const latest = useMemo(() => rows[0] ?? null, [rows]);
+  const evidenceByStatus = useMemo(() => latest?.summary?.evidenceByStatus || {}, [latest]);
 
   useEffect(() => {
     const run = async () => {
@@ -42,68 +44,96 @@ export default function CompliancePage() {
 
   return (
     <AppLayout>
-      {/* Header */}
-      <div className="bg-white shadow">
-        <div className="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
-          <h1 className="text-3xl font-bold text-gray-900">Compliance Snapshot</h1>
-          <p className="text-gray-600">Immutable, time-based snapshot of AI governance status.</p>
-        </div>
-      </div>
+      <PageHeader
+        title="Compliance"
+        subtitle="Immutable snapshots of governance posture for auditors and regulators."
+        right={
+          <>
+            <Link
+              href="/integrations/evidentia"
+              className="rounded-md border border-gray-300 dark:border-gray-800 bg-white dark:bg-gray-900 px-3 py-2 text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800"
+            >
+              Capture snapshot
+            </Link>
+            <button
+              type="button"
+              onClick={async () => {
+                const res = await api.get<any>('/api/reports/audit-package');
+                if (!res.success) {
+                  setError(res.error || 'Failed to export audit package');
+                  return;
+                }
+                const payload = JSON.stringify(res.data, null, 2);
+                const blob = new Blob([payload], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `audit-package-${new Date().toISOString().slice(0, 10)}.json`;
+                a.click();
+                URL.revokeObjectURL(url);
+              }}
+              className="rounded-md bg-blue-600 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-700"
+            >
+              Export audit package
+            </button>
+          </>
+        }
+      />
 
-      <div className="max-w-7xl mx-auto py-12 px-4 sm:px-6 lg:px-8 space-y-10">
+      <div className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8 space-y-8">
         {error && (
-          <div className="rounded-md bg-red-50 p-4 text-sm text-red-800 border border-red-100">{error}</div>
+          <div className="rounded-md bg-red-50 border border-red-200 p-4 text-sm text-red-800">{error}</div>
         )}
 
-        {/* Snapshot metrics */}
-        <section className="grid gap-4 md:grid-cols-4">
-          {[
-            { title: 'Policies', value: latest?.summary.policies ?? '—' },
-            { title: 'Controls', value: latest?.summary.controls ?? '—' },
-            { title: 'Risks', value: latest?.summary.risks ?? '—' },
-            { title: 'Evidence total', value: latest?.summary.evidenceTotal ?? '—' },
-          ].map((card) => (
-            <div key={card.title} className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
-              <div className="text-sm font-semibold text-gray-700">{card.title}</div>
-              <div className="mt-2 text-2xl font-bold text-gray-900">{card.value}</div>
-            </div>
-          ))}
+        <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+          <MetricCard title="Latest snapshot" value={latest ? new Date(latest.createdAt).toLocaleString() : '—'} />
+          <MetricCard title="Policies" value={latest?.summary.policies ?? '—'} />
+          <MetricCard title="Controls" value={latest?.summary.controls ?? '—'} />
+          <MetricCard title="Risks" value={latest?.summary.risks ?? '—'} />
+          <MetricCard title="Evidence total" value={latest?.summary.evidenceTotal ?? '—'} />
         </section>
 
         <section className="space-y-3">
-          <h2 className="text-xl font-semibold text-gray-900">Evidence by status</h2>
-          <div className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm space-y-2">
+          <div className="flex items-center justify-between gap-3">
+            <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">Evidence by status</h2>
+            <Link href="/evidence" className="text-sm font-medium text-blue-600 hover:text-blue-700">
+              Open evidence →
+            </Link>
+          </div>
+          <div className="rounded-lg border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-4 shadow-sm space-y-2">
             {loading ? (
-              <p className="text-sm text-gray-700">Loading…</p>
+              <p className="text-sm text-gray-700 dark:text-gray-200">Loading…</p>
             ) : latest ? (
-              Object.entries(latest.summary.evidenceByStatus || {}).length === 0 ? (
-                <p className="text-sm text-gray-700">No evidence recorded.</p>
+              Object.entries(evidenceByStatus).length === 0 ? (
+                <p className="text-sm text-gray-700 dark:text-gray-200">No evidence recorded.</p>
               ) : (
-                Object.entries(latest.summary.evidenceByStatus || {}).map(([status, count]) => (
-                  <div key={status} className="flex items-center justify-between text-sm text-gray-800">
-                    <span>{status}</span>
-                    <span className="text-gray-600">{count}</span>
+                Object.entries(evidenceByStatus).map(([status, count]) => (
+                  <div key={status} className="flex items-center justify-between text-sm text-gray-800 dark:text-gray-200">
+                    <span className="font-medium">{status}</span>
+                    <span className="text-gray-600 dark:text-gray-400">{count}</span>
                   </div>
                 ))
               )
             ) : (
-              <p className="text-sm text-gray-700">No snapshots yet. Capture one from the Evidentia integration page.</p>
+              <p className="text-sm text-gray-700 dark:text-gray-200">
+                No snapshots yet. Capture one from the Evidentia integration.
+              </p>
             )}
           </div>
         </section>
 
         <section className="space-y-3">
-          <h2 className="text-xl font-semibold text-gray-900">Snapshot history</h2>
-          <div className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm space-y-2">
+          <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">Snapshot history</h2>
+          <div className="rounded-lg border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-4 shadow-sm space-y-2">
             {loading ? (
-              <p className="text-sm text-gray-700">Loading…</p>
+              <p className="text-sm text-gray-700 dark:text-gray-200">Loading…</p>
             ) : rows.length === 0 ? (
-              <p className="text-sm text-gray-700">No snapshots captured yet.</p>
+              <p className="text-sm text-gray-700 dark:text-gray-200">No snapshots captured yet.</p>
             ) : (
               rows.map((s) => (
-                <div key={s.id} className="flex items-center justify-between text-sm text-gray-800">
+                <div key={s.id} className="flex items-center justify-between gap-3 text-sm text-gray-800 dark:text-gray-200">
                   <span className="font-medium">{new Date(s.createdAt).toLocaleString()}</span>
-                  <span className="text-gray-600">
+                  <span className="text-gray-600 dark:text-gray-400">
                     {s.summary.evidenceTotal} evidence · {s.summary.controls} controls
                   </span>
                 </div>
@@ -112,11 +142,9 @@ export default function CompliancePage() {
           </div>
         </section>
 
-        {/* Export note */}
-        <section className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
-          <div className="text-sm text-gray-700">
-            Snapshots are immutable, time-based, and exportable for auditors. Timestamp:{' '}
-            {latest ? new Date(latest.createdAt).toLocaleString() : '—'}
+        <section className="rounded-lg border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-4 shadow-sm">
+          <div className="text-sm text-gray-700 dark:text-gray-200">
+            Snapshots are immutable and exportable. Latest timestamp: {latest ? new Date(latest.createdAt).toLocaleString() : '—'}.
           </div>
         </section>
       </div>
