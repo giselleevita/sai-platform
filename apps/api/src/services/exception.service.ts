@@ -1,7 +1,5 @@
-import { PrismaClient } from '@prisma/client';
 import { AuditLogService } from './audit-log.service';
-
-const prisma = new PrismaClient();
+import { prisma } from './prisma.client';
 
 export interface CreateExceptionInput {
   toolId?: string;
@@ -13,14 +11,14 @@ export interface CreateExceptionInput {
 
 export class ExceptionService {
   static async list(companyId: string) {
-    return (prisma as any).exception.findMany({
+    return prisma.exception.findMany({
       where: { companyId },
       orderBy: { updatedAt: 'desc' },
     });
   }
 
   static async create(companyId: string, actorId: string | undefined, input: CreateExceptionInput) {
-    const exception = await (prisma as any).exception.create({
+    const exception = await prisma.exception.create({
       data: {
         companyId,
         toolId: input.toolId,
@@ -38,21 +36,21 @@ export class ExceptionService {
       action: 'exception.create',
       targetType: 'Exception',
       targetId: exception.id,
-      changes: input as any,
+      changes: input as unknown as Record<string, unknown>,
     });
 
     return exception;
   }
 
   static async update(companyId: string, actorId: string | undefined, id: string, input: CreateExceptionInput) {
-    const exception = await (prisma as any).exception.update({
+    const exception = await prisma.exception.update({
       where: { id, companyId },
       data: {
-        toolId: input.toolId,
-        riskId: input.riskId,
-        status: input.status,
-        approvedBy: input.status && input.status !== 'Pending' ? actorId : undefined,
-        expiresAt: input.expiresAt ? new Date(input.expiresAt) : undefined,
+        ...(input.toolId !== undefined ? { toolId: input.toolId } : {}),
+        ...(input.riskId !== undefined ? { riskId: input.riskId } : {}),
+        ...(input.status !== undefined ? { status: input.status } : {}),
+        ...(input.status !== undefined && input.status !== 'Pending' ? { approvedBy: actorId } : {}),
+        ...(input.expiresAt !== undefined ? { expiresAt: input.expiresAt ? new Date(input.expiresAt) : null } : {}),
       },
     });
 
@@ -62,7 +60,7 @@ export class ExceptionService {
       action: 'exception.update',
       targetType: 'Exception',
       targetId: id,
-      changes: input as any,
+      changes: input as unknown as Record<string, unknown>,
     });
 
     return exception;

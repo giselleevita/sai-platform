@@ -59,6 +59,69 @@ export function swaggerDocs(req: Request, res: Response, next: NextFunction) {
           },
         },
       },
+      '/api/inventory/{id}/governance': {
+        parameters: [{ $ref: '#/components/parameters/InventoryToolId' }],
+        get: {
+          summary: 'Get governance profile for an AI tool',
+          description:
+            'Returns merged profile: persisted data from `AITool.customFields.toolGovernance.profile` when set, otherwise demo fallback by tool name.',
+          tags: ['Inventory'],
+          security: [{ bearerAuth: [] }],
+          responses: {
+            '200': { description: 'Governance profile for the tool' },
+            '404': { description: 'Tool not found' },
+          },
+        },
+        patch: {
+          summary: 'Persist governance profile fields for an AI tool',
+          description:
+            'Merges into stored JSON under `customFields.toolGovernance.profile`. Requires TOOL_WRITE.',
+          tags: ['Inventory'],
+          security: [{ bearerAuth: [] }],
+          requestBody: {
+            required: true,
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/ToolGovernancePatch' },
+              },
+            },
+          },
+          responses: {
+            '200': { description: 'Updated profile' },
+            '404': { description: 'Tool not found' },
+          },
+        },
+      },
+      '/api/inventory/{id}/decisions': {
+        parameters: [{ $ref: '#/components/parameters/InventoryToolId' }],
+        get: {
+          summary: 'List tool-scoped decision log entries',
+          description:
+            'Free-form decision history stored on the tool (`customFields.toolGovernance.decisionLogs`), not the Risk `DecisionLog` table.',
+          tags: ['Inventory'],
+          security: [{ bearerAuth: [] }],
+          responses: {
+            '200': { description: 'Array of decision entries (newest first)' },
+          },
+        },
+        post: {
+          summary: 'Append a decision log entry',
+          tags: ['Inventory'],
+          security: [{ bearerAuth: [] }],
+          requestBody: {
+            required: true,
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/ToolDecisionLogCreate' },
+              },
+            },
+          },
+          responses: {
+            '201': { description: 'Created entry' },
+            '404': { description: 'Tool not found' },
+          },
+        },
+      },
       '/api/risks': {
         get: {
           summary: 'Get risks',
@@ -106,6 +169,39 @@ export function swaggerDocs(req: Request, res: Response, next: NextFunction) {
       },
     },
     components: {
+      parameters: {
+        InventoryToolId: {
+          name: 'id',
+          in: 'path',
+          required: true,
+          description: 'AI tool id',
+          schema: { type: 'string' },
+        },
+      },
+      schemas: {
+        ToolGovernancePatch: {
+          type: 'object',
+          additionalProperties: false,
+          properties: {
+            decisionStatus: { type: 'string', maxLength: 500 },
+            decisionOwner: { type: 'string', maxLength: 500 },
+            decisionOwnerRole: { type: 'string', maxLength: 500 },
+            decisionRationale: { type: 'string', maxLength: 4000 },
+            decisionExpiresAt: { type: 'string', maxLength: 100 },
+            reviewDate: { type: 'string', maxLength: 100 },
+            applicablePolicies: { type: 'array', items: { type: 'string' } },
+            complianceStatus: { type: 'string', maxLength: 500 },
+          },
+        },
+        ToolDecisionLogCreate: {
+          type: 'object',
+          required: ['decision'],
+          properties: {
+            decision: { type: 'string' },
+            rationale: { type: 'string' },
+          },
+        },
+      },
       securitySchemes: {
         bearerAuth: {
           type: 'http',

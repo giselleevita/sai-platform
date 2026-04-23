@@ -4,6 +4,7 @@ import { AuditLogService } from './audit-log.service';
 import { prisma } from './prisma.client';
 import { PaginationParams, PaginatedResponse, getSkip, getPaginationMeta } from '../utils/pagination';
 import { buildSearchFilter, buildSortOrder } from '../utils/search';
+import type { Prisma } from '@prisma/client';
 
 export interface CreateRiskInput {
   title: string;
@@ -52,7 +53,7 @@ export class RiskService {
     const limit = options.pagination?.limit || 20;
     const skip = getSkip(page, limit);
 
-    const where: any = {
+    const where: Prisma.RiskWhereInput = {
       companyId,
       deletedAt: null, // Soft delete filter
       ...(options.category && { category: options.category }),
@@ -60,7 +61,7 @@ export class RiskService {
     };
 
     const [risks, total] = await Promise.all([
-      (prisma as any).risk.findMany({
+      prisma.risk.findMany({
         where,
         skip,
         take: limit,
@@ -77,7 +78,7 @@ export class RiskService {
           },
         },
       }),
-      (prisma as any).risk.count({ where }),
+      prisma.risk.count({ where }),
     ]);
 
     return {
@@ -88,7 +89,7 @@ export class RiskService {
 
   static async create(companyId: string, actorId: string | undefined, input: CreateRiskInput) {
     // Use transaction to ensure atomicity
-    const result = await prisma.$transaction(async (tx: any) => {
+    const result = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
       const risk = await tx.risk.create({
         data: {
           companyId,
@@ -118,7 +119,7 @@ export class RiskService {
         action: 'risk.create',
         targetType: 'Risk',
         targetId: risk.id,
-        changes: input as any,
+        changes: input as unknown as Record<string, unknown>,
       });
 
       // Return risk with controls
@@ -139,8 +140,8 @@ export class RiskService {
 
   static async update(companyId: string, actorId: string | undefined, id: string, input: Partial<CreateRiskInput>) {
     // Use transaction for atomicity
-    const result = await prisma.$transaction(async (tx: any) => {
-      const updateData: any = {};
+    const result = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+      const updateData: Prisma.RiskUncheckedUpdateInput = {};
       if (input.title !== undefined) updateData.title = input.title;
       if (input.description !== undefined) updateData.description = input.description;
       if (input.likelihood !== undefined) updateData.likelihood = input.likelihood;
@@ -173,7 +174,7 @@ export class RiskService {
         action: 'risk.update',
         targetType: 'Risk',
         targetId: id,
-        changes: input as any,
+        changes: input as unknown as Record<string, unknown>,
       });
 
       // Return updated risk with controls
@@ -194,7 +195,7 @@ export class RiskService {
 
   static async delete(companyId: string, actorId: string | undefined, id: string) {
     // Soft delete
-    await (prisma as any).risk.update({
+    await prisma.risk.update({
       where: { id, companyId },
       data: { deletedAt: new Date() },
     });
@@ -210,14 +211,14 @@ export class RiskService {
 
   static async addDecision(companyId: string, actorId: string | undefined, riskId: string, input: DecisionInput) {
     const ledger = buildDecisionLedgerEntry(companyId, riskId, actorId, input);
-    const decision = await (prisma as any).decisionLog.create({
+    const decision = await prisma.decisionLog.create({
       data: {
         companyId,
         riskId,
         decision: input.decision,
         rationale: input.rationale,
         approvedBy: actorId,
-        immutable: true,
+        updatedAt: new Date(),
       },
     });
 
@@ -227,10 +228,7 @@ export class RiskService {
       action: 'risk.decision',
       targetType: 'DecisionLog',
       targetId: decision.id,
-      changes: {
-        ...input,
-        ledger,
-      } as any,
+      changes: { ...input, ledger } as unknown as Record<string, unknown>,
     });
 
     return decision;

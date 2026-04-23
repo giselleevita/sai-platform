@@ -208,6 +208,30 @@ export class InventoryController {
   }
 
   /**
+   * PATCH /api/inventory/:id/governance
+   * Persist governance profile fields (merges into AITool.customFields.toolGovernance.profile)
+   */
+  static async patchToolGovernance(req: AuthenticatedRequest, res: Response) {
+    const { id } = req.params;
+    const companyId = req.user?.companyId;
+    if (!companyId) {
+      throw new BadRequestError('Company ID not found');
+    }
+    const tool = await AIToolService.getToolById(id, companyId);
+    if (!tool) {
+      throw new NotFoundError('Tool not found');
+    }
+    const profile = await GovernanceFlowService.upsertGovernance(id, companyId, req.body || {});
+    res.json({
+      success: true,
+      data: {
+        toolId: tool.id,
+        ...profile,
+      },
+    });
+  }
+
+  /**
    * GET /api/inventory/:id/decisions
    * Returns decision history for a tool
    */

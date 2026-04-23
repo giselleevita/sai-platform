@@ -78,4 +78,26 @@ export const config = {
     /** Optional: require email to end with this domain (e.g. @acme.com). */
     allowedEmailDomain: process.env.OIDC_ALLOWED_EMAIL_DOMAIN?.trim().toLowerCase(),
   },
+  /**
+   * Evidentia evidence-service (governed extension). SAI calls this with a machine JWT
+   * that includes Evidentia tenant claims (`tid` / `tenant_id`).
+   */
+  evidentia: {
+    evidenceBaseUrl: process.env.EVIDENTIA_EVIDENCE_BASE_URL?.trim(),
+    serviceBearerToken: process.env.EVIDENTIA_SERVICE_BEARER_TOKEN?.trim(),
+    /** When true, only per-company `CompanyEvidentiaLink` tokens are accepted (no global fallback). */
+    requireCompanyLink: process.env.EVIDENTIA_REQUIRE_COMPANY_LINK === 'true',
+    httpTimeoutMs: Math.min(
+      120_000,
+      Math.max(1_000, Number(process.env.EVIDENTIA_HTTP_TIMEOUT_MS || '10000'))
+    ),
+    circuitFailureThreshold: Math.min(
+      50,
+      Math.max(1, Number(process.env.EVIDENTIA_CIRCUIT_FAILURE_THRESHOLD || '5'))
+    ),
+    circuitCooldownMs: Math.min(
+      600_000,
+      Math.max(5_000, Number(process.env.EVIDENTIA_CIRCUIT_COOLDOWN_MS || '30000'))
+    ),
+  },
 } as const;

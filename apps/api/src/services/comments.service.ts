@@ -31,7 +31,7 @@ export class CommentsService {
     targetId: string
   ): Promise<Comment[]> {
     // Get top-level comments
-    const comments = await (prisma as any).comment.findMany({
+    const comments = await prisma.comment.findMany({
       where: {
         companyId,
         targetType: targetType.toUpperCase(),
@@ -53,8 +53,8 @@ export class CommentsService {
 
     // Get replies for each comment
     const commentsWithReplies = await Promise.all(
-      comments.map(async (comment: any) => {
-        const replies = await (prisma as any).comment.findMany({
+      comments.map(async (comment) => {
+        const replies = await prisma.comment.findMany({
           where: {
             companyId,
             parentId: comment.id,
@@ -79,7 +79,7 @@ export class CommentsService {
           createdAt: comment.createdAt,
           updatedAt: comment.updatedAt,
           parentId: comment.parentId || undefined,
-          replies: replies.map((r: any) => ({
+          replies: replies.map((r) => ({
             id: r.id,
             content: r.content,
             author: r.author,
@@ -104,7 +104,7 @@ export class CommentsService {
     targetId: string,
     input: CreateCommentInput
   ): Promise<Comment> {
-    const comment = await (prisma as any).comment.create({
+    const comment = await prisma.comment.create({
       data: {
         companyId,
         targetType: targetType.toUpperCase(),
@@ -165,7 +165,7 @@ export class CommentsService {
     actorId: string,
     commentId: string
   ): Promise<void> {
-    await (prisma as any).comment.delete({
+    await prisma.comment.delete({
       where: {
         id: commentId,
         companyId,
