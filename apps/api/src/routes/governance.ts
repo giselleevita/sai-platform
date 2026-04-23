@@ -112,7 +112,7 @@ router.post(
 
 router.get(
   '/export-manifest',
-  requirePermission(Permission.COMPLIANCE_READ),
+  requirePermission(Permission.COMPLIANCE_EXPORT),
   asyncHandler(GovernanceExportController.exportManifest)
 );
 
