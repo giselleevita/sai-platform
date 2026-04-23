@@ -8,6 +8,17 @@ jest.mock('../services/prisma.client', () => {
       create: jest.fn(),
       update: jest.fn(),
     },
+    company: {
+      findUnique: jest.fn(),
+    },
+    evidenceSyncState: {
+      findUnique: jest.fn(),
+      upsert: jest.fn(),
+      update: jest.fn(),
+    },
+    companyEvidentiaLink: {
+      findUnique: jest.fn().mockResolvedValue(null),
+    },
     policy: {
       create: jest.fn(),
       update: jest.fn(),
@@ -26,6 +37,8 @@ jest.mock('../services/prisma.client', () => {
 describe('Status normalization compatibility', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    jest.mocked((prisma as any).company.findUnique).mockResolvedValue({ evidentiaSyncEnabled: false });
+    jest.mocked((prisma as any).evidenceSyncState.findUnique).mockResolvedValue(null);
     jest.mocked((prisma as any).evidence.create).mockResolvedValue({ id: 'ev-1' });
     jest.mocked((prisma as any).evidence.update).mockResolvedValue({ id: 'ev-1' });
     jest.mocked((prisma as any).policy.create).mockResolvedValue({ id: 'pol-1' });
