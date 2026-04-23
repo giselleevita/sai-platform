@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { AppLayout } from '@/components/shared';
 import { api } from '@/lib/api';
+import { getCsrfToken, redirectToLoginIfNoSession } from '@/lib/auth';
 
 export default function ImportToolsPage() {
   const router = useRouter();
@@ -23,7 +24,8 @@ export default function ImportToolsPage() {
       const formData = new FormData();
       formData.append('file', file);
 
-      const csrfToken = localStorage.getItem('csrf-token') || localStorage.getItem('token');
+      if (redirectToLoginIfNoSession(router)) return;
+      const csrfToken = getCsrfToken();
       if (!csrfToken) {
         router.push('/auth/login');
         return;

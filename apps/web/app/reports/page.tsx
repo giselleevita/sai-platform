@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { AppLayout } from '@/components/shared';
 import { api } from '@/lib/api';
+import { getCsrfToken, redirectToLoginIfNoSession } from '@/lib/auth';
 
 export default function ReportsPage() {
   const router = useRouter();
@@ -13,10 +14,7 @@ export default function ReportsPage() {
   const [customSections, setCustomSections] = useState<string[]>([]);
 
   useEffect(() => {
-    const token = localStorage.getItem('token');
-    if (!token) {
-      router.push('/auth/login');
-    }
+    redirectToLoginIfNoSession(router);
   }, [router]);
 
   const handleGenerateRiskReport = async (format: 'pdf' | 'json' = 'pdf') => {
@@ -24,15 +22,10 @@ export default function ReportsPage() {
     setError('');
     try {
       const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
-      const token = localStorage.getItem('token');
-      
+
       if (format === 'pdf') {
-        const headers: Record<string, string> = {};
-        if (token) {
-          headers['Authorization'] = `Bearer ${token}`;
-        }
         const response = await fetch(`${API_URL}/api/reports/risk-assessment?format=pdf&charts=true`, {
-          headers,
+          credentials: 'include',
         });
         
         if (!response.ok) {
@@ -81,15 +74,10 @@ export default function ReportsPage() {
     setError('');
     try {
       const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
-      const token = localStorage.getItem('token');
-      
+
       if (format === 'pdf') {
-        const headers: Record<string, string> = {};
-        if (token) {
-          headers['Authorization'] = `Bearer ${token}`;
-        }
         const response = await fetch(`${API_URL}/api/reports/compliance?format=pdf&charts=true`, {
-          headers,
+          credentials: 'include',
         });
         
         if (!response.ok) {
@@ -138,12 +126,9 @@ export default function ReportsPage() {
     setError('');
     try {
       const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
-      const token = localStorage.getItem('token');
-      
+
       const response = await fetch(`${API_URL}/api/reports/executive-summary?format=pdf&charts=true`, {
-        headers: {
-          'Authorization': `Bearer ${token || ''}`,
-        } as Record<string, string>,
+        credentials: 'include',
       });
       
       if (!response.ok) {
@@ -174,7 +159,7 @@ export default function ReportsPage() {
     setLoading(true);
     setError('');
     try {
-      const csrfToken = localStorage.getItem('csrf-token') || localStorage.getItem('token');
+      const csrfToken = getCsrfToken();
       if (!csrfToken) {
         router.push('/auth/login');
         return;
@@ -234,6 +219,32 @@ export default function ReportsPage() {
       setLoading(false);
     } catch (err) {
       setError('Failed to export inventory');
+      setLoading(false);
+    }
+  };
+
+  const handleDownloadAuditPackage = async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const result = await api.get<unknown>('/api/reports/audit-package');
+      if (!result.success || !result.data) {
+        setError(result.error || 'Failed to build audit package');
+        return;
+      }
+      const dataStr = JSON.stringify(result.data, null, 2);
+      const blob = new Blob([dataStr], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `audit-package-${new Date().toISOString().split('T')[0]}.json`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    } catch (err: any) {
+      setError(err?.message || 'Failed to download audit package');
+    } finally {
       setLoading(false);
     }
   };
@@ -325,6 +336,21 @@ export default function ReportsPage() {
               </button>
             </div>
 
+            {/* Audit package (JSON manifest) */}
+            <div className="border border-gray-200 rounded-lg p-6 hover:shadow-md transition-shadow">
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">Audit package</h3>
+              <p className="text-gray-600 text-sm mb-4">
+                Evidence, controls, snapshots, and recent audit log as one JSON bundle for auditors.
+              </p>
+              <button
+                onClick={handleDownloadAuditPackage}
+                disabled={loading}
+                className="w-full px-4 py-2 bg-slate-700 text-white rounded-md hover:bg-slate-800 text-sm font-medium disabled:opacity-50"
+              >
+                {loading ? 'Preparing...' : 'Download JSON'}
+              </button>
+            </div>
+
             {/* Custom Report Builder */}
             <div className="border border-gray-200 rounded-lg p-6 hover:shadow-md transition-shadow">
               <h3 className="text-lg font-semibold text-gray-900 mb-2">Custom Report Builder</h3>
@@ -373,17 +399,15 @@ export default function ReportsPage() {
                 setError('');
                 try {
                   const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
-                  const token = localStorage.getItem('token');
-                  
+                  const csrf = getCsrfToken();
                   const headers: Record<string, string> = {
                     'Content-Type': 'application/json',
                   };
-                  if (token) {
-                    headers['Authorization'] = `Bearer ${token}`;
-                  }
+                  if (csrf) headers['X-CSRF-Token'] = csrf;
                   const response = await fetch(`${API_URL}/api/reports/custom?format=pdf`, {
                     method: 'POST',
                     headers,
+                    credentials: 'include',
                     body: JSON.stringify(options),
                   });
                   

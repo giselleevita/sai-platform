@@ -49,10 +49,21 @@ export function hasAuthSession(): boolean {
 
   const csrfToken = getCsrfToken();
   if (csrfToken) return true;
+  return false;
+}
 
-  // Legacy fallback while old auth flow exists in some pages
-  const legacyToken = localStorage.getItem('token');
-  return !!legacyToken;
+/**
+ * Mirror CSRF from cookie, then redirect to login if there is no session.
+ * Prefer this over reading legacy `token` from localStorage.
+ */
+export function redirectToLoginIfNoSession(router: { push: (path: string) => void }): boolean {
+  if (typeof window === 'undefined') return false;
+  syncCsrfFromCookieToStorage();
+  if (!hasAuthSession()) {
+    router.push('/auth/login');
+    return true;
+  }
+  return false;
 }
 
 /**
@@ -68,5 +79,4 @@ export function isAuthenticated(): boolean {
 export function clearAuth(): void {
   if (typeof window === 'undefined') return;
   localStorage.removeItem('csrf-token');
-  localStorage.removeItem('token');
 }

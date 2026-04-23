@@ -58,8 +58,6 @@ export default function LoginPage() {
       const loginData = result.data as any;
       if (loginData?.csrfToken) {
         localStorage.setItem('csrf-token', loginData.csrfToken);
-        // Remove old token if exists (migration cleanup)
-        localStorage.removeItem('token');
         // Redirect to dashboard
         router.push('/dashboard');
       } else {
@@ -211,7 +209,6 @@ export default function LoginPage() {
                   const loginData = result.data as any;
                   if (loginData?.csrfToken) {
                     localStorage.setItem('csrf-token', loginData.csrfToken);
-                    localStorage.removeItem('token'); // Remove legacy token
                   }
 
                   // Redirect to dashboard

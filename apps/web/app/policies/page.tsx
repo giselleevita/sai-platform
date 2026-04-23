@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { api } from '@/lib/api';
+import { redirectToLoginIfNoSession } from '@/lib/auth';
 import { AppLayout } from '@/components/shared';
 
 interface Policy {
@@ -33,11 +34,7 @@ export default function PoliciesPage() {
   const loadPolicies = async () => {
     try {
       setLoading(true);
-      const token = localStorage.getItem('token');
-      if (!token) {
-        router.push('/auth/login');
-        return;
-      }
+      if (redirectToLoginIfNoSession(router)) return;
 
       const result = await api.get<Policy[]>('/api/governance/policies');
       if (result.success && result.data) {
