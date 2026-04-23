@@ -68,7 +68,7 @@ export class AuthController {
   /**
    * GET /api/auth/oidc/login — redirect to enterprise IdP (requires OIDC_* env).
    */
-  static async oidcLogin(_req: Request, res: Response) {
+  static async oidcLogin(req: Request, res: Response) {
     if (!OidcService.isEnabled()) {
       res.status(503).json({
         success: false,
@@ -76,7 +76,19 @@ export class AuthController {
       });
       return;
     }
-    await OidcService.startLogin(res);
+    const inviteToken = typeof req.query.invite === 'string' ? req.query.invite : undefined;
+    const companyId = typeof req.query.companyId === 'string' ? req.query.companyId : undefined;
+    if (inviteToken) {
+      // Tie invite acceptance to this browser session (OIDC-only onboarding).
+      res.cookie('oidc_invite', inviteToken, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'lax',
+        maxAge: 10 * 60 * 1000,
+        path: '/',
+      });
+    }
+    await OidcService.startLogin(res, { companyId });
   }
 
   /**
@@ -90,7 +102,9 @@ export class AuthController {
       }
 
       const claims = await OidcService.handleCallback(req, res);
-      const result = await AuthService.completeOidcLogin(claims);
+      const inviteToken = typeof req.cookies?.oidc_invite === 'string' ? req.cookies.oidc_invite : undefined;
+      res.clearCookie('oidc_invite', { path: '/' });
+      const result = await AuthService.completeOidcLogin({ ...claims, inviteToken });
 
       AuthService.setTokenCookie(res as any, result.token, result.refreshToken, result.refreshTokenExpiresAt);
 
@@ -111,7 +125,7 @@ export class AuthController {
     } catch (error) {
       logger.error('OIDC callback error:', error);
       const target = process.env.FRONTEND_URL || 'http://localhost:3000';
-      const redirect = new URL('/login', target.replace(/\/$/, ''));
+      const redirect = new URL('/auth/login', target.replace(/\/$/, ''));
       redirect.searchParams.set('error', 'oidc_failed');
       redirect.searchParams.set('message', (error as Error).message || 'OIDC sign-in failed');
       res.redirect(redirect.toString());
@@ -186,6 +200,30 @@ export class AuthController {
       logger.error('Error fetching user:', error);
       throw error;
     }
+  }
+
+  static async listCompanies(req: AuthenticatedRequest, res: Response) {
+    const userId = req.user?.id;
+    if (!userId) {
+      throw new UnauthorizedError('User not authenticated');
+    }
+    const rows = await AuthService.listCompaniesForUser(userId);
+    res.json({ success: true, data: rows });
+  }
+
+  static async switchCompany(req: AuthenticatedRequest, res: Response) {
+    const userId = req.user?.id;
+    if (!userId) {
+      throw new UnauthorizedError('User not authenticated');
+    }
+    const companyId = req.body?.companyId;
+    if (typeof companyId !== 'string' || !companyId) {
+      throw new BadRequestError('companyId is required');
+    }
+
+    const result = await AuthService.switchCompany({ userId, companyId });
+    AuthService.setTokenCookie(res as any, result.token, result.refreshToken, result.refreshTokenExpiresAt);
+    res.json({ success: true, data: { company: result.company, user: result.user } });
   }
 
   /**

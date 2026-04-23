@@ -5,6 +5,7 @@ import { TOTP, generateSecret, generateURI, verify } from 'otplib';
 import { Response } from 'express';
 import { prisma } from './prisma.client';
 import { config } from '../config';
+import type { UserRole } from '@prisma/client';
 
 const JWT_SECRET = config.jwt.secret;
 const JWT_EXPIRES_IN = config.jwt.expiresIn;
@@ -36,6 +37,19 @@ export interface LoginInput {
 }
 
 export class AuthService {
+  private static async resolveRoleForCompany(params: {
+    userId: string;
+    companyId: string;
+    fallbackRole: string;
+  }): Promise<string> {
+    const membership = await prisma.userCompanyMembership.findUnique({
+      where: { userId_companyId: { userId: params.userId, companyId: params.companyId } },
+      select: { role: true, status: true },
+    });
+    if (membership && membership.status === 'ACTIVE') return membership.role;
+    return params.fallbackRole;
+  }
+
   /**
    * Generate JWT token for user
    */
@@ -82,7 +96,7 @@ export class AuthService {
   /**
    * Create refresh token and persist it
    */
-  static async createRefreshToken(userId: string) {
+  static async createRefreshToken(userId: string, companyId?: string | null) {
     const token = crypto.randomBytes(32).toString('hex');
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + REFRESH_TOKEN_DAYS);
@@ -91,6 +105,7 @@ export class AuthService {
       data: {
         token,
         userId,
+        companyId: companyId ?? null,
         expiresAt,
       },
     });
@@ -111,18 +126,39 @@ export class AuthService {
       throw new Error('Invalid or expired refresh token');
     }
 
+    const activeCompanyId = stored.companyId || stored.user.company?.id || '';
+    if (!activeCompanyId) {
+      throw new Error('Refresh token missing company context');
+    }
+
+    const membership = await prisma.userCompanyMembership.findUnique({
+      where: { userId_companyId: { userId: stored.userId, companyId: activeCompanyId } },
+      select: { status: true },
+    });
+    if (!membership || membership.status !== 'ACTIVE') {
+      throw new Error('Membership is not active for this company');
+    }
+
     await prisma.refreshToken.update({
       where: { token: refreshToken },
       data: { revokedAt: new Date() },
     });
 
-    const newRefresh = await this.createRefreshToken(stored.userId);
+    const newRefresh = await this.createRefreshToken(stored.userId, activeCompanyId);
+
+    const role = activeCompanyId
+      ? await this.resolveRoleForCompany({
+          userId: stored.user.id,
+          companyId: activeCompanyId,
+          fallbackRole: stored.user.role,
+        })
+      : stored.user.role;
 
     const accessToken = this.generateToken({
       id: stored.user.id,
       email: stored.user.email,
-      companyId: stored.user.company?.id || '',
-      role: stored.user.role,
+      companyId: activeCompanyId,
+      role,
     });
 
     return {
@@ -194,10 +230,10 @@ export class AuthService {
    */
   static async signup(input: SignupInput) {
     // Check if user already exists
-    // Temporary workaround: use type assertion to bypass Prisma enum type mismatch
-    const existingUser = await (prisma as any).user.findUnique({
+    const existingUser = await prisma.user.findUnique({
       where: { email: input.email },
-    }) as any;
+      select: { id: true },
+    });
 
     if (existingUser) {
       throw new Error('User with this email already exists');
@@ -238,6 +274,14 @@ export class AuthService {
         },
       });
 
+      await tx.userCompanyMembership.create({
+        data: {
+          userId: user.id,
+          companyId: company.id,
+          role: user.role,
+        },
+      });
+
       return { user, company };
     });
 
@@ -248,7 +292,7 @@ export class AuthService {
       companyId: result.company.id,
       role: result.user.role,
     });
-    const refreshToken = await this.createRefreshToken(result.user.id);
+    const refreshToken = await this.createRefreshToken(result.user.id, result.company.id);
 
     return {
       token,
@@ -280,6 +324,10 @@ export class AuthService {
 
     if (!user || !user.company) {
       throw new Error('Invalid email or password');
+    }
+
+    if ((user as any).disabledAt) {
+      throw new Error('Account is disabled');
     }
 
     if (!user.password) {
@@ -317,13 +365,19 @@ export class AuthService {
     }
 
     // Generate token
+    const role = await this.resolveRoleForCompany({
+      userId: user.id,
+      companyId: user.company.id,
+      fallbackRole: user.role,
+    });
+
     const token = this.generateToken({
       id: user.id,
       email: user.email,
       companyId: user.company.id,
-      role: user.role,
+      role,
     });
-    const refreshToken = await this.createRefreshToken(user.id);
+    const refreshToken = await this.createRefreshToken(user.id, user.company.id);
 
     return {
       token,
@@ -333,7 +387,7 @@ export class AuthService {
         id: user.id,
         email: user.email,
         name: user.name,
-        role: user.role,
+        role,
         mfaEnabled: user.mfaEnabled,
       },
       company: {
@@ -436,15 +490,25 @@ export class AuthService {
     name: string;
     role: string;
     mfaEnabled: boolean;
+    disabledAt?: Date | null;
     company: { id: string; name: string; email: string };
   }) {
+    if (user.disabledAt) {
+      throw new Error('Account is disabled');
+    }
+    const role = await this.resolveRoleForCompany({
+      userId: user.id,
+      companyId: user.company.id,
+      fallbackRole: user.role,
+    });
+
     const token = this.generateToken({
       id: user.id,
       email: user.email,
       companyId: user.company.id,
-      role: user.role,
+      role,
     });
-    const refreshToken = await this.createRefreshToken(user.id);
+    const refreshToken = await this.createRefreshToken(user.id, user.company.id);
 
     return {
       token,
@@ -454,7 +518,7 @@ export class AuthService {
         id: user.id,
         email: user.email,
         name: user.name,
-        role: user.role,
+        role,
         mfaEnabled: user.mfaEnabled,
       },
       company: {
@@ -473,17 +537,58 @@ export class AuthService {
     subject: string;
     email: string;
     name: string;
+    companyId?: string;
+    groups?: string[];
+    inviteToken?: string;
   }) {
     const provider = `oidc:${params.issuerUrl}`;
     const email = params.email.trim().toLowerCase();
 
-    const domainRule = config.oidc.allowedEmailDomain;
-    if (domainRule) {
-      const suffix = domainRule.startsWith('@') ? domainRule : `@${domainRule}`;
-      if (!email.endsWith(suffix.toLowerCase())) {
-        throw new Error(`Email must use the allowed domain ${suffix}`);
+    const targetCompanyId = params.companyId;
+    if (targetCompanyId) {
+      const domain = email.split('@')[1]?.toLowerCase() || '';
+      const verified = await prisma.verifiedDomain.findUnique({
+        where: { companyId_domain: { companyId: targetCompanyId, domain } },
+        select: { verifiedAt: true },
+      });
+      if (!verified?.verifiedAt) {
+        throw new Error('Email domain is not verified for this company');
+      }
+    } else {
+      const domainRule = config.oidc.allowedEmailDomain;
+      if (domainRule) {
+        const suffix = domainRule.startsWith('@') ? domainRule : `@${domainRule}`;
+        if (!email.endsWith(suffix.toLowerCase())) {
+          throw new Error(`Email must use the allowed domain ${suffix}`);
+        }
       }
     }
+
+    const computeRoleFromGroups = async (companyId: string, fallback: string): Promise<UserRole> => {
+      const groups = params.groups?.filter(Boolean) ?? [];
+      if (!groups.length) return fallback as UserRole;
+      const mappings = await prisma.groupRoleMapping.findMany({
+        where: { companyId, group: { in: groups } },
+        select: { role: true },
+      });
+      const roles = new Set(mappings.map((m) => m.role));
+      const order = ['MANAGEMENT', 'ADMIN', 'AUDITOR', 'OPERATOR'];
+      for (const r of order) {
+        if (roles.has(r as any)) return r as UserRole;
+      }
+      return fallback as UserRole;
+    };
+
+    const ensureMembership = async (userId: string, companyId: string, baseRole: string) => {
+      const role = await computeRoleFromGroups(companyId, baseRole);
+      await prisma.userCompanyMembership.upsert({
+        where: { userId_companyId: { userId, companyId } },
+        create: { userId, companyId, role },
+        update: { role, status: 'ACTIVE' },
+      });
+      await prisma.user.update({ where: { id: userId }, data: { companyId } });
+      return role;
+    };
 
     const linked = await prisma.oAuthAccount.findUnique({
       where: {
@@ -497,15 +602,32 @@ export class AuthService {
       },
     });
 
-    if (linked?.user?.company) {
-      return this.issueSessionForUser({
-        id: linked.user.id,
-        email: linked.user.email,
-        name: linked.user.name,
-        role: linked.user.role,
-        mfaEnabled: linked.user.mfaEnabled,
-        company: linked.user.company,
-      });
+    if (linked?.user) {
+      if (targetCompanyId) {
+        const role = await ensureMembership(linked.user.id, targetCompanyId, linked.user.role);
+        const company = await prisma.company.findUnique({ where: { id: targetCompanyId } });
+        if (!company) throw new Error('Company not found');
+        return this.issueSessionForUser({
+          id: linked.user.id,
+          email: linked.user.email,
+          name: linked.user.name,
+          role,
+          mfaEnabled: linked.user.mfaEnabled,
+          disabledAt: (linked.user as any).disabledAt ?? null,
+          company: { id: company.id, name: company.name, email: company.email },
+        });
+      }
+      if (linked.user.company) {
+        return this.issueSessionForUser({
+          id: linked.user.id,
+          email: linked.user.email,
+          name: linked.user.name,
+          role: linked.user.role,
+          mfaEnabled: linked.user.mfaEnabled,
+          disabledAt: (linked.user as any).disabledAt ?? null,
+          company: linked.user.company,
+        });
+      }
     }
 
     const existingUser = await prisma.user.findUnique({
@@ -513,29 +635,79 @@ export class AuthService {
       include: { company: true },
     });
 
-    if (existingUser?.company) {
+    if (existingUser) {
+      if ((existingUser as any).disabledAt) {
+        throw new Error('Account is disabled');
+      }
       await prisma.oAuthAccount.create({
-        data: {
-          provider,
-          subject: params.subject,
-          userId: existingUser.id,
-        },
+        data: { provider, subject: params.subject, userId: existingUser.id },
       });
 
+      const chosenCompanyId = targetCompanyId ?? existingUser.companyId ?? existingUser.company?.id;
+      if (!chosenCompanyId) {
+        throw new Error('No company selected for this account');
+      }
+      const role = await ensureMembership(existingUser.id, chosenCompanyId, existingUser.role);
+      const company = await prisma.company.findUnique({ where: { id: chosenCompanyId } });
+      if (!company) throw new Error('Company not found');
       return this.issueSessionForUser({
         id: existingUser.id,
         email: existingUser.email,
         name: existingUser.name,
-        role: existingUser.role,
+        role,
         mfaEnabled: existingUser.mfaEnabled,
-        company: existingUser.company,
+        disabledAt: (existingUser as any).disabledAt ?? null,
+        company: { id: company.id, name: company.name, email: company.email },
       });
     }
 
     if (!config.oidc.jitProvisioning) {
-      throw new Error(
-        'No account found for this email. Ask an admin to invite you, or enable OIDC JIT provisioning.',
-      );
+      if (!params.inviteToken) {
+        throw new Error('No account found for this email. Ask an admin to invite you.');
+      }
+      const { InvitationsService } = await import('./invitations.service');
+      const accepted = await InvitationsService.acceptInvitationByToken({
+        email,
+        token: params.inviteToken,
+      });
+
+      const created = await prisma.$transaction(async (tx) => {
+        const user = await tx.user.create({
+          data: {
+            email,
+            name: params.name,
+            password: null,
+            companyId: accepted.companyId,
+            role: accepted.role,
+          },
+        });
+        await tx.userCompanyMembership.create({
+          data: { userId: user.id, companyId: accepted.companyId, role: user.role },
+        });
+        await tx.oAuthAccount.create({
+          data: {
+            provider,
+            subject: params.subject,
+            userId: user.id,
+          },
+        });
+        const company = await tx.company.findUnique({ where: { id: accepted.companyId } });
+        return { user, company };
+      });
+
+      if (!created.company) {
+        throw new Error('Company not found');
+      }
+
+      return this.issueSessionForUser({
+        id: created.user.id,
+        email: created.user.email,
+        name: created.user.name,
+        role: created.user.role,
+        mfaEnabled: created.user.mfaEnabled,
+        disabledAt: (created.user as any).disabledAt ?? null,
+        company: created.company,
+      });
     }
 
     const companyEmail = email;
@@ -557,6 +729,9 @@ export class AuthService {
           companyId: company.id,
           role: 'MANAGEMENT',
         },
+      });
+      await tx.userCompanyMembership.create({
+        data: { userId: user.id, companyId: company.id, role: user.role },
       });
 
       await tx.oAuthAccount.create({
@@ -584,8 +759,7 @@ export class AuthService {
    * Get user by ID
    */
   static async getUserById(userId: string) {
-    // Temporary workaround: use type assertion to bypass Prisma enum type mismatch
-    const user = await (prisma as any).user.findUnique({
+    const user = await prisma.user.findUnique({
       where: { id: userId },
       select: {
         id: true,
@@ -593,6 +767,7 @@ export class AuthService {
         name: true,
         role: true,
         mfaEnabled: true,
+        disabledAt: true,
         company: {
           select: {
             id: true,
@@ -606,5 +781,45 @@ export class AuthService {
     });
 
     return user;
+  }
+
+  static async listCompaniesForUser(userId: string) {
+    const rows = await prisma.userCompanyMembership.findMany({
+      where: { userId, status: 'ACTIVE' },
+      include: { company: { select: { id: true, name: true, email: true } } },
+      orderBy: { createdAt: 'asc' },
+    });
+    return rows.map((r) => ({
+      companyId: r.company.id,
+      companyName: r.company.name,
+      companyEmail: r.company.email,
+      role: r.role,
+    }));
+  }
+
+  static async switchCompany(params: { userId: string; companyId: string }) {
+    const membership = await prisma.userCompanyMembership.findUnique({
+      where: { userId_companyId: { userId: params.userId, companyId: params.companyId } },
+      include: { company: true, user: true },
+    });
+    if (!membership || membership.status !== 'ACTIVE') {
+      throw new Error('Not a member of that company');
+    }
+
+    // Keep legacy semantics: active tenant stored on User.companyId
+    await prisma.user.update({
+      where: { id: params.userId },
+      data: { companyId: membership.companyId },
+    });
+
+    return this.issueSessionForUser({
+      id: membership.user.id,
+      email: membership.user.email,
+      name: membership.user.name,
+      role: membership.role,
+      mfaEnabled: membership.user.mfaEnabled,
+      disabledAt: membership.user.disabledAt,
+      company: { id: membership.company.id, name: membership.company.name, email: membership.company.email },
+    });
   }
 }

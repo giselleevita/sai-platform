@@ -38,6 +38,18 @@ router.post('/login', authRateLimiter, validate({ body: loginSchema }), asyncHan
 router.get('/me', authMiddleware, asyncHandler(AuthController.getMe));
 
 /**
+ * GET /api/auth/companies
+ * List companies current user can access
+ */
+router.get('/companies', authMiddleware, asyncHandler(AuthController.listCompanies));
+
+/**
+ * POST /api/auth/switch-company
+ * Switch active company for session (issues new cookies)
+ */
+router.post('/switch-company', authMiddleware, asyncHandler(AuthController.switchCompany));
+
+/**
  * POST /api/auth/mfa/setup
  * Starts MFA enrollment (requires auth)
  */
