@@ -174,4 +174,25 @@ export class GovernanceController {
     await GovernanceService.deleteRegulation(companyId, actorId, req.params.id);
     res.json({ success: true });
   }
+
+  static async createComplianceSnapshot(req: AuthenticatedRequest, res: Response) {
+    const companyId = req.user?.companyId;
+    const actorId = req.user?.id;
+    if (!companyId) {
+      res.status(401).json({ success: false, error: 'Unauthorized' });
+      return;
+    }
+    const snap = await GovernanceService.createComplianceSnapshot(companyId, actorId);
+    res.status(201).json({ success: true, data: snap });
+  }
+
+  static async listComplianceSnapshots(req: AuthenticatedRequest, res: Response) {
+    const companyId = req.user?.companyId;
+    if (!companyId) {
+      res.status(401).json({ success: false, error: 'Unauthorized' });
+      return;
+    }
+    const rows = await GovernanceService.listComplianceSnapshots(companyId);
+    res.json({ success: true, data: rows });
+  }
 }

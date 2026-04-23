@@ -120,12 +120,24 @@ export class CacheService {
     }
 
     try {
-      const keys = await client.keys(pattern);
-      if (keys.length === 0) {
-        return 0;
+      let cursor = '0';
+      let deleted = 0;
+      const batchSize = 200;
+
+      do {
+        const [nextCursor, keys] = await client.scan(cursor, 'MATCH', pattern, 'COUNT', String(batchSize));
+        cursor = nextCursor;
+
+        if (keys.length) {
+          await client.del(...keys);
+          deleted += keys.length;
+        }
+      } while (cursor !== '0');
+
+      if (deleted) {
+        logger.info('Cache pattern invalidated', { pattern, deleted });
       }
-      await client.del(...keys);
-      return keys.length;
+      return deleted;
     } catch (error) {
       logger.error(`Cache delete pattern error for ${pattern}:`, error);
       return 0;

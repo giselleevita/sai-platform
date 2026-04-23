@@ -1,145 +1,44 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { AppLayout } from '@/components/shared';
-import type { ComplianceSnapshot, Tool } from '@/types';
+import { api } from '@/lib/api';
 
-const demoTools: Tool[] = [
-  {
-    id: 'demo-1',
-    name: 'GenAI Copilot',
-    category: 'LLM',
-    vendor: 'OpenAI',
-    riskLevel: 'High',
-    riskScore: 82,
-    users: 120,
-    frequency: 'Daily',
-    dataTypes: ['PII', 'Proprietary'],
-    controls: ['DLP', 'MFA'],
-    hasDPA: true,
-    dataResidency: 'EU',
-    notes: 'Limited scope, quarterly review',
-    companyId: 'demo-company',
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-    decisionStatus: 'Accepted with expiry',
-    decisionOwner: 'Maya Chen',
-    decisionRationale: 'Controls in place, limited scope',
-    decisionExpiresAt: '2026-06-01',
-  },
-  {
-    id: 'demo-2',
-    name: 'ImageGen Pro',
-    category: 'LLM',
-    vendor: 'Stability',
-    riskLevel: 'Critical',
-    riskScore: 91,
-    users: 40,
-    frequency: 'Weekly',
-    dataTypes: ['IP', 'Proprietary'],
-    controls: ['MFA'],
-    hasDPA: false,
-    dataResidency: 'US',
-    notes: 'Requires DPA before use',
-    companyId: 'demo-company',
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-    decisionStatus: 'Rejected',
-    decisionOwner: 'Security Council',
-    decisionRationale: 'No DPA, sensitive data',
-  },
-  {
-    id: 'demo-3',
-    name: 'DataInsights LLM',
-    category: 'Analytics',
-    vendor: 'Databricks',
-    riskLevel: 'Medium',
-    riskScore: 64,
-    users: 85,
-    frequency: 'Daily',
-    dataTypes: ['Financial', 'Proprietary'],
-    controls: ['Logging', 'Access reviews'],
-    hasDPA: true,
-    companyId: 'demo-company',
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-    decisionStatus: 'Mitigate',
-    decisionOwner: 'Risk Committee',
-    decisionRationale: 'Needs enhanced monitoring',
-    reviewDate: '2026-04-15',
-  },
-  {
-    id: 'demo-4',
-    name: 'VoiceBot Assist',
-    category: 'Other',
-    vendor: 'Twilio',
-    riskLevel: 'Low',
-    riskScore: 32,
-    users: 55,
-    frequency: 'Weekly',
-    dataTypes: ['Public'],
-    controls: ['Audit logging'],
-    hasDPA: true,
-    companyId: 'demo-company',
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-    decisionStatus: 'Accepted',
-    decisionOwner: 'Operations',
-    decisionRationale: 'Low risk, logging enabled',
-  },
-  {
-    id: 'demo-5',
-    name: 'AutoClassifier',
-    category: 'Analytics',
-    vendor: 'Custom',
-    riskLevel: 'High',
-    riskScore: 78,
-    users: 65,
-    frequency: 'Daily',
-    dataTypes: ['PII', 'Financial'],
-    controls: ['Access reviews'],
-    hasDPA: false,
-    companyId: 'demo-company',
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-    decisionStatus: 'Pending',
-    decisionOwner: 'Unassigned',
-    decisionRationale: 'Decision required before production use',
-  },
-];
-
-const calculateSnapshot = (tools: Tool[]): ComplianceSnapshot => {
-  const total = tools.length || 1;
-  const withDecision = tools.filter((t) => t.decisionStatus && t.decisionStatus !== 'Pending').length;
-  const percentCompliant = Math.round((withDecision / total) * 100);
-
-  const highRiskUnresolved = tools.filter(
-    (t) =>
-      (t.riskLevel === 'High' || t.riskLevel === 'Critical') &&
-      (!t.decisionStatus || t.decisionStatus === 'Pending' || t.decisionStatus === 'Rejected')
-  ).length;
-
-  const missingDecisions = tools.filter((t) => !t.decisionStatus || t.decisionStatus === 'Pending').length;
-
-  const overdueReviews = tools.filter((t) => {
-    if (!t.reviewDate) return false;
-    return new Date(t.reviewDate) < new Date();
-  }).length;
-
-  return {
-    timestamp: new Date().toISOString(),
-    percentCompliant,
-    highRiskUnresolved,
-    missingDecisions,
-    overdueReviews,
+type ApiComplianceSnapshot = {
+  id: string;
+  createdAt: string;
+  summary: {
+    generatedAt: string;
+    policies: number;
+    controls: number;
+    risks: number;
+    evidenceTotal: number;
+    evidenceByStatus: Record<string, number>;
   };
 };
 
 export default function CompliancePage() {
-  const snapshot = useMemo(() => calculateSnapshot(demoTools), []);
-  const highRisk = demoTools.filter((t) => t.riskLevel === 'High' || t.riskLevel === 'Critical');
-  const missingDecisions = demoTools.filter((t) => !t.decisionStatus || t.decisionStatus === 'Pending');
-  const overdue = demoTools.filter((t) => t.reviewDate && new Date(t.reviewDate) < new Date());
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [rows, setRows] = useState<ApiComplianceSnapshot[]>([]);
+
+  const latest = useMemo(() => rows[0] ?? null, [rows]);
+
+  useEffect(() => {
+    const run = async () => {
+      setLoading(true);
+      setError('');
+      const res = await api.get<ApiComplianceSnapshot[]>('/api/governance/compliance-snapshots');
+      if (!res.success) {
+        setError(res.error || 'Failed to load snapshots');
+        setRows([]);
+      } else {
+        setRows(Array.isArray(res.data) ? res.data : []);
+      }
+      setLoading(false);
+    };
+    void run();
+  }, []);
 
   return (
     <AppLayout>
@@ -152,13 +51,17 @@ export default function CompliancePage() {
       </div>
 
       <div className="max-w-7xl mx-auto py-12 px-4 sm:px-6 lg:px-8 space-y-10">
+        {error && (
+          <div className="rounded-md bg-red-50 p-4 text-sm text-red-800 border border-red-100">{error}</div>
+        )}
+
         {/* Snapshot metrics */}
         <section className="grid gap-4 md:grid-cols-4">
           {[
-            { title: '% compliant AI tools', value: `${snapshot.percentCompliant}%` },
-            { title: 'High-risk unresolved', value: snapshot.highRiskUnresolved },
-            { title: 'Missing decisions', value: snapshot.missingDecisions },
-            { title: 'Overdue reviews', value: snapshot.overdueReviews },
+            { title: 'Policies', value: latest?.summary.policies ?? '—' },
+            { title: 'Controls', value: latest?.summary.controls ?? '—' },
+            { title: 'Risks', value: latest?.summary.risks ?? '—' },
+            { title: 'Evidence total', value: latest?.summary.evidenceTotal ?? '—' },
           ].map((card) => (
             <div key={card.title} className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
               <div className="text-sm font-semibold text-gray-700">{card.title}</div>
@@ -167,51 +70,42 @@ export default function CompliancePage() {
           ))}
         </section>
 
-        {/* High-risk unresolved */}
         <section className="space-y-3">
-          <h2 className="text-xl font-semibold text-gray-900">High-risk unresolved tools</h2>
+          <h2 className="text-xl font-semibold text-gray-900">Evidence by status</h2>
           <div className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm space-y-2">
-            {highRisk.length === 0 ? (
-              <p className="text-sm text-gray-700">No unresolved high-risk tools.</p>
+            {loading ? (
+              <p className="text-sm text-gray-700">Loading…</p>
+            ) : latest ? (
+              Object.entries(latest.summary.evidenceByStatus || {}).length === 0 ? (
+                <p className="text-sm text-gray-700">No evidence recorded.</p>
+              ) : (
+                Object.entries(latest.summary.evidenceByStatus || {}).map(([status, count]) => (
+                  <div key={status} className="flex items-center justify-between text-sm text-gray-800">
+                    <span>{status}</span>
+                    <span className="text-gray-600">{count}</span>
+                  </div>
+                ))
+              )
             ) : (
-              highRisk.map((t) => (
-                <div key={t.id} className="flex items-center justify-between text-sm text-gray-800">
-                  <span>{t.name}</span>
-                  <span className="text-gray-600">{t.decisionStatus || 'No decision'}</span>
-                </div>
-              ))
+              <p className="text-sm text-gray-700">No snapshots yet. Capture one from the Evidentia integration page.</p>
             )}
           </div>
         </section>
 
-        {/* Missing decisions */}
         <section className="space-y-3">
-          <h2 className="text-xl font-semibold text-gray-900">Missing decisions</h2>
+          <h2 className="text-xl font-semibold text-gray-900">Snapshot history</h2>
           <div className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm space-y-2">
-            {missingDecisions.length === 0 ? (
-              <p className="text-sm text-gray-700">All tools have recorded decisions.</p>
+            {loading ? (
+              <p className="text-sm text-gray-700">Loading…</p>
+            ) : rows.length === 0 ? (
+              <p className="text-sm text-gray-700">No snapshots captured yet.</p>
             ) : (
-              missingDecisions.map((t) => (
-                <div key={t.id} className="flex items-center justify-between text-sm text-gray-800">
-                  <span>{t.name}</span>
-                  <span className="text-gray-600">Decision required</span>
-                </div>
-              ))
-            )}
-          </div>
-        </section>
-
-        {/* Overdue reviews */}
-        <section className="space-y-3">
-          <h2 className="text-xl font-semibold text-gray-900">Overdue reviews</h2>
-          <div className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm space-y-2">
-            {overdue.length === 0 ? (
-              <p className="text-sm text-gray-700">No overdue reviews.</p>
-            ) : (
-              overdue.map((t) => (
-                <div key={t.id} className="flex items-center justify-between text-sm text-gray-800">
-                  <span>{t.name}</span>
-                  <span className="text-gray-600">Review overdue</span>
+              rows.map((s) => (
+                <div key={s.id} className="flex items-center justify-between text-sm text-gray-800">
+                  <span className="font-medium">{new Date(s.createdAt).toLocaleString()}</span>
+                  <span className="text-gray-600">
+                    {s.summary.evidenceTotal} evidence · {s.summary.controls} controls
+                  </span>
                 </div>
               ))
             )}
@@ -222,7 +116,7 @@ export default function CompliancePage() {
         <section className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
           <div className="text-sm text-gray-700">
             Snapshots are immutable, time-based, and exportable for auditors. Timestamp:{' '}
-            {new Date(snapshot.timestamp).toLocaleString()}
+            {latest ? new Date(latest.createdAt).toLocaleString() : '—'}
           </div>
         </section>
       </div>

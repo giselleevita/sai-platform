@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { authMiddleware, requirePermission, Permission } from '../middleware';
 import { asyncHandler } from '../utils';
 import { GovernanceController } from '../controllers';
+import { GovernanceExportController } from '../controllers/governance-export.controller';
 import { validate } from '../middleware/validation';
 import {
   createControlSchema,
@@ -96,6 +97,23 @@ router.delete(
   '/regulations/:id',
   requirePermission(Permission.REGULATION_WRITE), // Using WRITE for delete as there's no REGULATION_DELETE
   asyncHandler(GovernanceController.deleteRegulation)
+);
+
+router.get(
+  '/compliance-snapshots',
+  requirePermission(Permission.COMPLIANCE_READ),
+  asyncHandler(GovernanceController.listComplianceSnapshots)
+);
+router.post(
+  '/compliance-snapshots',
+  requirePermission(Permission.COMPLIANCE_EXPORT),
+  asyncHandler(GovernanceController.createComplianceSnapshot)
+);
+
+router.get(
+  '/export-manifest',
+  requirePermission(Permission.COMPLIANCE_READ),
+  asyncHandler(GovernanceExportController.exportManifest)
 );
 
 export default router;

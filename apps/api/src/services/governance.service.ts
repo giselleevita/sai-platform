@@ -3,6 +3,7 @@ import { prisma } from './prisma.client';
 import { AuditLogService } from './audit-log.service';
 import { NotFoundError } from '../errors/AppError';
 import { normalizeLifecycleStatus } from './status-normalization.service';
+import type { Prisma } from '@prisma/client';
 
 // Type definition for LifecycleStatus (temporary until Prisma client is regenerated)
 type LifecycleStatus = 'DRAFT' | 'ACTIVE' | 'UNDER_REVIEW' | 'RETIRED';
@@ -217,19 +218,19 @@ export interface CreateRegulationInput {
 
 export class GovernanceService {
   static async listPolicies(companyId: string) {
-    return (prisma as any).policy.findMany({
+    return prisma.policy.findMany({
       where: { companyId },
       orderBy: { updatedAt: 'desc' },
     });
   }
 
   static async createPolicy(companyId: string, actorId: string | undefined, input: CreatePolicyInput) {
-    const policy = await (prisma as any).policy.create({
+    const policy = await prisma.policy.create({
       data: {
         ...input,
         status: normalizeLifecycleStatus(input.status) || undefined,
         companyId,
-      } as any,
+      },
     });
 
     await AuditLogService.log({
@@ -238,14 +239,14 @@ export class GovernanceService {
       action: 'policy.create',
       targetType: 'Policy',
       targetId: policy.id,
-      changes: input as any,
+      changes: input as unknown as Record<string, unknown>,
     });
 
     return policy;
   }
 
   static async updatePolicy(companyId: string, actorId: string | undefined, id: string, input: Partial<CreatePolicyInput>) {
-    const policy = await (prisma as any).policy.update({
+    const policy = await prisma.policy.update({
       where: { id, companyId },
       data: {
         ...input,
@@ -259,14 +260,14 @@ export class GovernanceService {
       action: 'policy.update',
       targetType: 'Policy',
       targetId: id,
-      changes: input as any,
+      changes: input as unknown as Record<string, unknown>,
     });
 
     return policy;
   }
 
   static async deletePolicy(companyId: string, actorId: string | undefined, id: string) {
-    await (prisma as any).policy.delete({
+    await prisma.policy.delete({
       where: { id, companyId },
     });
 
@@ -280,19 +281,19 @@ export class GovernanceService {
   }
 
   static async listControls(companyId: string) {
-    return (prisma as any).control.findMany({
+    return prisma.control.findMany({
       where: { companyId },
       orderBy: { updatedAt: 'desc' },
     });
   }
 
   static async createControl(companyId: string, actorId: string | undefined, input: CreateControlInput) {
-    const control = await (prisma as any).control.create({
+    const control = await prisma.control.create({
       data: {
         ...input,
         status: normalizeLifecycleStatus(input.status) || undefined,
         companyId,
-      } as any,
+      },
     });
 
     await AuditLogService.log({
@@ -301,14 +302,14 @@ export class GovernanceService {
       action: 'control.create',
       targetType: 'Control',
       targetId: control.id,
-      changes: input as any,
+      changes: input as unknown as Record<string, unknown>,
     });
 
     return control;
   }
 
   static async updateControl(companyId: string, actorId: string | undefined, id: string, input: Partial<CreateControlInput>) {
-    const control = await (prisma as any).control.update({
+    const control = await prisma.control.update({
       where: { id, companyId },
       data: {
         ...input,
@@ -322,14 +323,14 @@ export class GovernanceService {
       action: 'control.update',
       targetType: 'Control',
       targetId: id,
-      changes: input as any,
+      changes: input as unknown as Record<string, unknown>,
     });
 
     return control;
   }
 
   static async deleteControl(companyId: string, actorId: string | undefined, id: string) {
-    await (prisma as any).control.delete({
+    await prisma.control.delete({
       where: { id, companyId },
     });
 
@@ -343,15 +344,20 @@ export class GovernanceService {
   }
 
   static async listProcedures(companyId: string) {
-    return (prisma as any).procedure.findMany({
+    return prisma.procedure.findMany({
       where: { companyId },
       orderBy: { updatedAt: 'desc' },
     });
   }
 
   static async createProcedure(companyId: string, actorId: string | undefined, input: CreateProcedureInput) {
-    const procedure = await (prisma as any).procedure.create({
-      data: { ...input, companyId } as any,
+    const procedure = await prisma.procedure.create({
+      data: {
+        companyId,
+        controlId: input.controlId,
+        name: input.name,
+        steps: (input.steps ?? {}) as Prisma.InputJsonValue,
+      },
     });
 
     await AuditLogService.log({
@@ -360,16 +366,19 @@ export class GovernanceService {
       action: 'procedure.create',
       targetType: 'Procedure',
       targetId: procedure.id,
-      changes: input as any,
+      changes: input as unknown as Record<string, unknown>,
     });
 
     return procedure;
   }
 
   static async updateProcedure(companyId: string, actorId: string | undefined, id: string, input: Partial<CreateProcedureInput>) {
-    const procedure = await (prisma as any).procedure.update({
+    const procedure = await prisma.procedure.update({
       where: { id, companyId },
-      data: input,
+      data: {
+        ...(input.name !== undefined ? { name: input.name } : {}),
+        ...(input.steps !== undefined ? { steps: (input.steps ?? {}) as Prisma.InputJsonValue } : {}),
+      },
     });
 
     await AuditLogService.log({
@@ -378,14 +387,14 @@ export class GovernanceService {
       action: 'procedure.update',
       targetType: 'Procedure',
       targetId: id,
-      changes: input as any,
+      changes: input as unknown as Record<string, unknown>,
     });
 
     return procedure;
   }
 
   static async deleteProcedure(companyId: string, actorId: string | undefined, id: string) {
-    await (prisma as any).procedure.delete({
+    await prisma.procedure.delete({
       where: { id, companyId },
     });
 
@@ -399,15 +408,15 @@ export class GovernanceService {
   }
 
   static async listRegulations(companyId: string) {
-    return (prisma as any).regulation.findMany({
+    return prisma.regulation.findMany({
       where: { companyId },
       orderBy: { updatedAt: 'desc' },
     });
   }
 
   static async createRegulation(companyId: string, actorId: string | undefined, input: CreateRegulationInput) {
-    const regulation = await (prisma as any).regulation.create({
-      data: { ...input, companyId } as any,
+    const regulation = await prisma.regulation.create({
+      data: { ...input, companyId },
     });
 
     await AuditLogService.log({
@@ -416,14 +425,14 @@ export class GovernanceService {
       action: 'regulation.create',
       targetType: 'Regulation',
       targetId: regulation.id,
-      changes: input as any,
+      changes: input as unknown as Record<string, unknown>,
     });
 
     return regulation;
   }
 
   static async updateRegulation(companyId: string, actorId: string | undefined, id: string, input: Partial<CreateRegulationInput>) {
-    const regulation = await (prisma as any).regulation.update({
+    const regulation = await prisma.regulation.update({
       where: { id, companyId },
       data: input,
     });
@@ -434,14 +443,14 @@ export class GovernanceService {
       action: 'regulation.update',
       targetType: 'Regulation',
       targetId: id,
-      changes: input as any,
+      changes: input as unknown as Record<string, unknown>,
     });
 
     return regulation;
   }
 
   static async deleteRegulation(companyId: string, actorId: string | undefined, id: string) {
-    await (prisma as any).regulation.delete({
+    await prisma.regulation.delete({
       where: { id, companyId },
     });
 
@@ -451,6 +460,59 @@ export class GovernanceService {
       action: 'regulation.delete',
       targetType: 'Regulation',
       targetId: id,
+    });
+  }
+
+  /** Point-in-time compliance / governance counts for audit snapshots. */
+  static async createComplianceSnapshot(companyId: string, actorId: string | undefined) {
+    const [policies, controls, risks, evidenceTotal] = await Promise.all([
+      prisma.policy.count({ where: { companyId } }),
+      prisma.control.count({ where: { companyId } }),
+      prisma.risk.count({ where: { companyId } }),
+      prisma.evidence.count({ where: { companyId } }),
+    ]);
+
+    const evidenceByStatus = await prisma.evidence.groupBy({
+      by: ['status'],
+      where: { companyId },
+      _count: { id: true },
+    });
+
+    const summary = {
+      generatedAt: new Date().toISOString(),
+      policies,
+      controls,
+      risks,
+      evidenceTotal,
+      evidenceByStatus: Object.fromEntries(
+        evidenceByStatus.map((row) => [row.status, row._count.id])
+      ),
+    };
+
+    const snap = await prisma.complianceSnapshot.create({
+      data: {
+        companyId,
+        summary,
+      },
+    });
+
+    await AuditLogService.log({
+      companyId,
+      actorId,
+      action: 'compliance.snapshot.create',
+      targetType: 'ComplianceSnapshot',
+      targetId: snap.id,
+      changes: { snapshotId: snap.id },
+    });
+
+    return snap;
+  }
+
+  static async listComplianceSnapshots(companyId: string) {
+    return prisma.complianceSnapshot.findMany({
+      where: { companyId },
+      orderBy: { createdAt: 'desc' },
+      take: 24,
     });
   }
 }
