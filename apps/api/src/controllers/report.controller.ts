@@ -391,8 +391,39 @@ export class ReportController {
       return;
     }
 
+    const enabled = await EntitlementsService.getBool(companyId, 'report_exports_enabled');
+    if (enabled === false) {
+      throw new BadRequestError('Report exports are disabled for your plan');
+    }
+    const maxPerDay = await EntitlementsService.getInt(companyId, 'max_report_exports_per_day');
+    if (typeof maxPerDay === 'number') {
+      const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
+      const exports = await prisma.auditLog.count({
+        where: { companyId, action: 'REPORT_EXPORT', createdAt: { gte: since } },
+      });
+      if (exports >= maxPerDay) {
+        throw new BadRequestError(`Plan limit reached: max_report_exports_per_day=${maxPerDay}`);
+      }
+    }
+
     const data = await ReportExportService.exportCompliancePdf(companyId);
-    res.json({ success: true, data });
+
+    await prisma.auditLog.create({
+      data: {
+        companyId,
+        actorId: req.user?.id || null,
+        action: 'REPORT_EXPORT',
+        targetType: 'Report',
+        targetId: null,
+        changes: { type: 'compliance-export' } as any,
+      },
+    });
+
+    // `base64Payload` is used as transport for now; return correct headers and raw bytes for UX correctness.
+    const buf = Buffer.from(data.base64Payload, 'base64');
+    res.setHeader('Content-Type', data.mimeType);
+    res.setHeader('Content-Disposition', `attachment; filename="${data.filename.replace(/\"/g, '')}"`);
+    res.send(buf);
   }
 
   /**
@@ -420,6 +451,17 @@ export class ReportController {
         throw new BadRequestError(`Plan limit reached: max_report_exports_per_day=${maxPerDay}`);
       }
     }
+
+    await prisma.auditLog.create({
+      data: {
+        companyId,
+        actorId: req.user?.id || null,
+        action: 'REPORT_EXPORT',
+        targetType: 'Report',
+        targetId: null,
+        changes: { type: 'audit-package' } as any,
+      },
+    });
 
     const [snapshots, evidence, controls, policies, risks, auditTail] = await Promise.all([
       prisma.complianceSnapshot.findMany({
@@ -467,17 +509,6 @@ export class ReportController {
         policies,
         risks,
         recentAuditLog: auditTail,
-      },
-    });
-
-    await prisma.auditLog.create({
-      data: {
-        companyId,
-        actorId: req.user?.id || null,
-        action: 'REPORT_EXPORT',
-        targetType: 'Report',
-        targetId: null,
-        changes: { type: 'audit-package' } as any,
       },
     });
   }

@@ -2,6 +2,8 @@ import { Response } from 'express';
 import crypto from 'crypto';
 import { AuthenticatedRequest } from '../middleware/auth';
 import { prisma } from '../services/prisma.client';
+import { EntitlementsService } from '../services/entitlements.service';
+import { BadRequestError } from '../errors/AppError';
 
 function sha256Json(obj: unknown): string {
   const json = JSON.stringify(obj ?? null);
@@ -14,6 +16,21 @@ export class GovernanceExportController {
     if (!companyId) {
       res.status(401).json({ success: false, error: 'Unauthorized' });
       return;
+    }
+
+    const enabled = await EntitlementsService.getBool(companyId, 'report_exports_enabled');
+    if (enabled === false) {
+      throw new BadRequestError('Report exports are disabled for your plan');
+    }
+    const maxPerDay = await EntitlementsService.getInt(companyId, 'max_report_exports_per_day');
+    if (typeof maxPerDay === 'number') {
+      const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
+      const exports = await prisma.auditLog.count({
+        where: { companyId, action: 'REPORT_EXPORT', createdAt: { gte: since } },
+      });
+      if (exports >= maxPerDay) {
+        throw new BadRequestError(`Plan limit reached: max_report_exports_per_day=${maxPerDay}`);
+      }
     }
 
     const snapshots = await prisma.complianceSnapshot.findMany({
@@ -46,6 +63,17 @@ export class GovernanceExportController {
       arr.push(a);
       byEvidence.set(a.evidenceId, arr);
     }
+
+    await prisma.auditLog.create({
+      data: {
+        companyId,
+        actorId: req.user?.id || null,
+        action: 'REPORT_EXPORT',
+        targetType: 'Report',
+        targetId: null,
+        changes: { type: 'governance-export-manifest', limit } as any,
+      },
+    });
 
     res.json({
       success: true,
