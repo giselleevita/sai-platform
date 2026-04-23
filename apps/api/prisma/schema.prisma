@@ -14,6 +14,7 @@ model User {
   /// Null when the user only signs in via OIDC / SSO (no local password).
   password         String?
   role             UserRole         @default(OPERATOR)
+  disabledAt       DateTime?
   mfaEnabled       Boolean          @default(false)
   mfaSecret        String?
   mfaRecoveryCodes String[]         @default([])
@@ -36,9 +37,13 @@ model User {
   comments         Comment[]        @relation("CommentAuthor")
   company          Company?         @relation(fields: [companyId], references: [id], onDelete: Cascade)
   oauthAccounts    OAuthAccount[]
+  sentInvitations   Invitation[]     @relation("UserInvitations")
+  memberships       UserCompanyMembership[]
+  createdEvidenceAttachments EvidenceAttachment[] @relation("EvidenceAttachmentCreatedBy")
 
   @@index([email])
   @@index([companyId])
+  @@index([disabledAt])
 }
 
 /// Links a user to an external IdP subject (OIDC issuer + sub).
@@ -60,6 +65,8 @@ model Company {
   email               String               @unique
   industry            String?
   country             String?
+  /// When true and EVIDENTIA_* env is set, SAI pushes evidence lifecycle to Evidentia.
+  evidentiaSyncEnabled Boolean             @default(false)
   createdAt           DateTime             @default(now())
   updatedAt           DateTime             @updatedAt
   aiTools             AITool[]
@@ -69,9 +76,11 @@ model Company {
   controls            Control[]
   DecisionLog         DecisionLog[]
   evidence            Evidence[]
+  evidenceAttachments EvidenceAttachment[]
   exceptions          Exception[]
   incidents           Incident[]
   IncidentReview      IncidentReview[]
+  integrationConnectors IntegrationConnector[]
   MetricAggregation   MetricAggregation[]
   PerformanceMetric   PerformanceMetric[]
   policies            Policy[]
@@ -84,8 +93,199 @@ model Company {
   comments            Comment[]
   webhooks            Webhook[]
   scheduledReports    ScheduledReport[]
+  invitations         Invitation[]
+  evidentiaSyncStates EvidentiaSyncState[]
+  evidentiaLink       CompanyEvidentiaLink?
+  memberships         UserCompanyMembership[]
+  ssoConnection       SsoConnection?
+  verifiedDomains     VerifiedDomain[]
+  groupRoleMappings   GroupRoleMapping[]
+  scimTokens          ScimToken[]
+  subscription        CompanySubscription?
+  entitlements        CompanyEntitlement[]
 
   @@index([email])
+}
+
+model CompanySubscription {
+  companyId   String   @id
+  plan        String
+  status      String   @default("active")
+  periodStart DateTime?
+  periodEnd   DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+}
+
+model CompanyEntitlement {
+  id        String   @id @default(cuid())
+  companyId String
+  key       String
+  valueInt  Int?
+  valueBool Boolean?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, key])
+  @@index([companyId])
+}
+
+model ScimToken {
+  id          String   @id @default(cuid())
+  companyId   String
+  tokenHash   String   @unique
+  name        String
+  lastUsedAt  DateTime?
+  revokedAt   DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([companyId])
+  @@index([revokedAt])
+}
+
+model SsoConnection {
+  companyId   String   @id
+  issuer      String
+  clientId    String
+  clientSecretRef String
+  redirectUri String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+}
+
+model VerifiedDomain {
+  id         String   @id @default(cuid())
+  companyId  String
+  domain     String
+  verifiedAt DateTime?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, domain])
+  @@index([companyId])
+}
+
+model GroupRoleMapping {
+  id        String   @id @default(cuid())
+  companyId String
+  group     String
+  role      UserRole
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, group])
+  @@index([companyId])
+}
+
+enum MembershipStatus {
+  ACTIVE
+  DISABLED
+}
+
+model UserCompanyMembership {
+  id        String           @id @default(cuid())
+  userId    String
+  companyId String
+  role      UserRole
+  status    MembershipStatus @default(ACTIVE)
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, companyId])
+  @@index([companyId])
+  @@index([userId])
+}
+
+enum EvidentiaAuthMode {
+  STATIC_JWT_ENVREF
+}
+
+/// Phase 1: per-company Evidentia tenant + auth reference (no secrets stored).
+model CompanyEvidentiaLink {
+  companyId        String           @id
+  evidentiaTenantId String
+  authMode         EvidentiaAuthMode @default(STATIC_JWT_ENVREF)
+  /// Reference to a runtime secret (e.g. env var name). Do not store tokens here.
+  secretRef        String
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+}
+
+/// Idempotency + last-error tracking for SAI → Evidentia evidence sync (Phase 0 hardening).
+model EvidentiaSyncState {
+  evidenceId            String    @id
+  companyId             String
+  evidentiaExternalId   String?
+  lastPushedContentHash  String?
+  lastSuccessAt         DateTime?
+  lastAttemptAt         DateTime  @default(now())
+  lastError             String?
+  lastHttpStatus        Int?
+
+  evidence Evidence @relation(fields: [evidenceId], references: [id], onDelete: Cascade)
+  company  Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([companyId])
+}
+
+/// Registered external connectors (GitHub, Evidentia, etc.) — config JSON holds non-secret settings only.
+model IntegrationConnector {
+  id         String    @id @default(cuid())
+  companyId  String
+  type       String
+  name       String
+  enabled    Boolean   @default(false)
+  config     Json      @default("{}")
+  lastSyncAt DateTime?
+  lastError  String?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  company    Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([companyId])
+  @@index([type])
+}
+
+model Invitation {
+  id              String    @id @default(cuid())
+  companyId        String
+  email           String
+  role            UserRole
+  tokenHash       String
+  expiresAt       DateTime
+  acceptedAt      DateTime?
+  revokedAt       DateTime?
+  invitedByUserId String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  invitedBy User?   @relation("UserInvitations", fields: [invitedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([companyId])
+  @@index([email])
+  @@index([expiresAt])
+  @@index([acceptedAt])
+  @@index([revokedAt])
+  @@unique([tokenHash])
 }
 
 model AITool {
@@ -318,12 +518,46 @@ model Evidence {
   createdAt   DateTime       @default(now())
   updatedAt   DateTime       @updatedAt
   contentHash String?
+  /// Evidentia evidence UUID when governed copy exists there.
+  externalEvidenceId String?
+  /// How the record was produced (e.g. manual, sai_sync, collector).
+  collectionMethod   String?
+  assignedReviewerId String?
+  reviewNote         String?
+  reviewedAt         DateTime?
+  reviewedById       String?
   company     Company        @relation(fields: [companyId], references: [id], onDelete: Cascade)
   control     Control        @relation(fields: [controlId], references: [id], onDelete: Cascade)
+  evidentiaSync EvidentiaSyncState?
+  attachments  EvidenceAttachment[]
 
   @@index([companyId])
   @@index([controlId])
   @@index([status])
+  @@index([externalEvidenceId])
+}
+
+model EvidenceAttachment {
+  id          String   @id @default(cuid())
+  companyId   String
+  evidenceId  String
+  filename    String
+  contentType String
+  sizeBytes   Int
+  sha256      String
+  storagePath String
+  lastVerifiedAt DateTime?
+  invalidAt    DateTime?
+  lastVerifyError String?
+  createdById String?
+  createdAt   DateTime @default(now())
+
+  evidence Evidence @relation(fields: [evidenceId], references: [id], onDelete: Cascade)
+  company  Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  createdBy User?   @relation("EvidenceAttachmentCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@index([companyId])
+  @@index([evidenceId])
 }
 
 model Incident {
@@ -420,12 +654,14 @@ model RefreshToken {
   id        String    @id @default(cuid())
   token     String    @unique
   userId    String
+  companyId String?
   expiresAt DateTime
   revokedAt DateTime?
   createdAt DateTime  @default(now())
   user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
+  @@index([companyId])
   @@index([expiresAt])
 }
 
