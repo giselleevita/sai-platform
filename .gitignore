@@ -13,3 +13,6 @@ dist/
 *.swp
 coverage/
 .turbo/
+
+# Local/generated review outputs
+reports/
