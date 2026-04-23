@@ -3,6 +3,7 @@ import { calculateRiskScore } from '@sai/risk-scoring';
 import { prisma } from './prisma.client';
 import { logger } from '../utils/logger';
 import { CacheService } from './cache.service';
+import { EntitlementsService } from './entitlements.service';
 
 export interface CreateAIToolInput {
   name: string;
@@ -26,6 +27,14 @@ export class AIToolService {
    * Create new AI tool for company
    */
   static async createTool(companyId: string, input: CreateAIToolInput): Promise<AITool> {
+    const maxTools = await EntitlementsService.getInt(companyId, 'max_ai_tools');
+    if (typeof maxTools === 'number') {
+      const count = await prisma.aITool.count({ where: { companyId, deletedAt: null } });
+      if (count >= maxTools) {
+        throw new Error(`Plan limit reached: max_ai_tools=${maxTools}`);
+      }
+    }
+
     // Calculate risk score
     const riskResult = calculateRiskScore({
       name: input.name,
