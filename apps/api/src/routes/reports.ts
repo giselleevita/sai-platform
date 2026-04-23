@@ -47,6 +47,16 @@ router.get(
 );
 
 /**
+ * GET /api/reports/audit-package
+ * Auditor-oriented JSON bundle (download / archive externally as needed).
+ */
+router.get(
+  '/audit-package',
+  requirePermission(Permission.REPORT_EXPORT),
+  asyncHandler(ReportController.generateAuditPackage)
+);
+
+/**
  * POST /api/reports/custom
  * Generate custom report
  * Requires: REPORT_READ

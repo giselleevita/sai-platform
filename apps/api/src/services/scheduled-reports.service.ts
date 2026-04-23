@@ -1,12 +1,14 @@
 import * as cron from 'node-cron';
+import cronParser from 'cron-parser';
 import { prisma } from './prisma.client';
 import { PDFReportService, ReportOptions } from './pdf-report.service';
-import { AuditLogService } from './audit-log.service';
-import { EmailService } from './email.service';
 import { logger } from '../utils/logger';
+import { EmailService } from './email.service';
+import type { Prisma } from '@prisma/client';
+import { initRedis } from './cache.service';
 import { randomUUID } from 'crypto';
 
-export interface ScheduledReport {
+interface ScheduledReport {
   id: string;
   companyId: string;
   name: string;
@@ -19,90 +21,128 @@ export interface ScheduledReport {
   nextRun?: Date;
 }
 
-const SCHEDULED_REPORT_TARGET = 'ScheduledReport';
-const SCHEDULED_REPORT_ACTIONS = {
-  CREATED: 'scheduled-report.created',
-  EXECUTED: 'scheduled-report.executed',
-  DELETED: 'scheduled-report.deleted',
-  UPDATED: 'scheduled-report.updated',
-};
-
-export class ScheduledReportsService {
+class ScheduledReportsService {
   private static tasks: Map<string, cron.ScheduledTask> = new Map();
+  private static initialized = false;
+  private static leader: { instanceId: string; renewTimer: NodeJS.Timeout } | null = null;
+
+  private static async acquireLeaderLock(): Promise<boolean> {
+    if (this.leader) return true;
+    const client = initRedis();
+    if (!client) return true; // dev mode / no Redis => best effort
+
+    const instanceId = randomUUID();
+    const lockKey = 'sai:scheduled_reports:leader';
+    const ttlMs = 60_000;
+
+    const ok = await client.set(lockKey, instanceId, 'PX', ttlMs, 'NX');
+    if (ok !== 'OK') {
+      logger.warn('Scheduled reports leader lock not acquired; skipping scheduler init');
+      return false;
+    }
+
+    const renewTimer = setInterval(async () => {
+      try {
+        const current = await client.get(lockKey);
+        if (current !== instanceId) {
+          clearInterval(renewTimer);
+          this.leader = null;
+          return;
+        }
+        await client.set(lockKey, instanceId, 'PX', ttlMs, 'XX');
+      } catch (e) {
+        logger.warn('Scheduled reports leader lock renew failed', e);
+      }
+    }, Math.floor(ttlMs / 2));
+
+    this.leader = { instanceId, renewTimer };
+    return true;
+  }
 
   /**
-   * Initialize scheduled reports for a company on boot
+   * Initialize all enabled schedules at process boot.
+   */
+  static async initializeAllReports() {
+    if (this.initialized) return;
+    if (!(await this.acquireLeaderLock())) return;
+    const rows = await prisma.scheduledReport.findMany({
+      where: { enabled: true },
+    });
+    for (const row of rows) {
+      this.scheduleReport(row.id, row.companyId, {
+        name: row.name,
+        type: row.type as ScheduledReport['type'],
+        schedule: row.schedule,
+        options: row.options as unknown as ReportOptions,
+        recipients: row.recipients || [],
+        enabled: row.enabled,
+      });
+    }
+    this.initialized = true;
+    logger.info(`Initialized ${rows.length} scheduled reports`);
+  }
+
+  /**
+   * Initialize scheduled reports for one company.
    */
   static async initializeCompanyReports(companyId: string) {
-    try {
-      const reports = await this.getScheduledReports(companyId);
-      for (const report of reports) {
-        if (report.enabled) {
-          this.scheduleReport(report.id, companyId, report);
-        }
-      }
-      logger.info(`Initialized ${reports.length} scheduled reports for company ${companyId}`);
-    } catch (error) {
-      logger.error(`Failed to initialize scheduled reports for company ${companyId}:`, error);
-    }
-  }
-
-  /**
-   * Re-initialize all scheduled reports from all companies
-   */
-  static async initializeAllCompanyReports() {
-    try {
-      const companies = await prisma.company.findMany({
-        select: { id: true },
+    if (!(await this.acquireLeaderLock())) return;
+    const rows = await prisma.scheduledReport.findMany({
+      where: { companyId, enabled: true },
+    });
+    for (const row of rows) {
+      this.scheduleReport(row.id, row.companyId, {
+        name: row.name,
+        type: row.type as ScheduledReport['type'],
+        schedule: row.schedule,
+        options: row.options as unknown as ReportOptions,
+        recipients: row.recipients || [],
+        enabled: row.enabled,
       });
-      for (const company of companies) {
-        await this.initializeCompanyReports(company.id);
-      }
-      logger.info(`Initialized scheduled reports for ${companies.length} companies`);
-    } catch (error) {
-      logger.error('Failed to initialize scheduled reports across companies:', error);
     }
+    logger.info(`Initialized scheduled reports for company ${companyId}`);
   }
 
   /**
-   * Create a scheduled report
+   * Create a scheduled report.
    */
   static async createScheduledReport(
     companyId: string,
-    actorId: string | undefined,
-    report: Omit<ScheduledReport, 'id' | 'lastRun' | 'nextRun'>
+    report: Omit<ScheduledReport, 'id' | 'companyId' | 'lastRun' | 'nextRun'>
   ): Promise<ScheduledReport> {
-    const id = randomUUID();
-    
-    // Persist to audit log
-    await AuditLogService.log({
-      companyId,
-      actorId,
-      action: SCHEDULED_REPORT_ACTIONS.CREATED,
-      targetType: SCHEDULED_REPORT_TARGET,
-      targetId: id,
-      changes: {
-        ...report,
-        nextRun: this.calculateNextRun(report.schedule),
+    if (!cron.validate(report.schedule)) {
+      throw new Error(`Invalid cron expression: ${report.schedule}`);
+    }
+    const nextRun = this.calculateNextRun(report.schedule);
+    const created = await prisma.scheduledReport.create({
+      data: {
+        companyId,
+        name: report.name,
+        type: report.type,
+        schedule: report.schedule,
+        options: report.options as unknown as Prisma.InputJsonValue,
+        recipients: report.recipients || [],
+        enabled: report.enabled ?? true,
+        nextRun,
       },
     });
 
-    if (report.enabled) {
-      this.scheduleReport(id, companyId, report);
+    if (created.enabled) {
+      this.scheduleReport(created.id, companyId, {
+        name: created.name,
+        type: created.type as ScheduledReport['type'],
+        schedule: created.schedule,
+        options: created.options as unknown as ReportOptions,
+        recipients: created.recipients || [],
+        enabled: created.enabled,
+      });
     }
 
-    const scheduledReport: ScheduledReport = {
-      id,
-      ...report,
-      lastRun: undefined,
-      nextRun: this.calculateNextRun(report.schedule),
-    };
-
-    return scheduledReport;
+    return this.toScheduledReport(created);
   }
 
   /**
-   * Schedule a report
+   * Schedule a report.
    */
   private static scheduleReport(
     id: string,
@@ -120,48 +160,27 @@ export class ScheduledReportsService {
     const task = cron.schedule(report.schedule, async () => {
       try {
         logger.info(`Running scheduled report ${id} for company ${companyId}`);
-        
-        const pdf = await PDFReportService.generatePDF(companyId, report.options);
-        const reportUrl = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/reports/${id}/download`;
-        
-        // Send email to recipients
-        for (const recipient of report.recipients) {
-          try {
-            await EmailService.sendScheduledReportNotification(recipient, report.name, reportUrl);
-          } catch (emailError) {
-            logger.warn(`Failed to send scheduled report email to ${recipient}:`, emailError);
-          }
-        }
-        
-        // Log execution
-        await AuditLogService.log({
-          companyId,
-          action: SCHEDULED_REPORT_ACTIONS.EXECUTED,
-          targetType: SCHEDULED_REPORT_TARGET,
-          targetId: id,
-          changes: {
-            executedAt: new Date().toISOString(),
-            recipientCount: report.recipients.length,
-            status: 'success',
-          },
+
+        await PDFReportService.generatePDF(companyId, report.options);
+        const now = new Date();
+        const nextRun = this.calculateNextRun(report.schedule, now);
+
+        await prisma.scheduledReport.updateMany({
+          where: { id, companyId },
+          data: { lastRun: now, nextRun },
         });
-        
-        logger.info(`Scheduled report ${id} generated and sent successfully`);
-        
+
+        for (const recipient of report.recipients || []) {
+          await EmailService.sendScheduledReportNotification(
+            recipient,
+            report.name,
+            `${process.env.FRONTEND_URL || 'http://localhost:3000'}/reports`
+          );
+        }
+
+        logger.info(`Scheduled report ${id} generated successfully`);
       } catch (error) {
         logger.error(`Error running scheduled report ${id}:`, error);
-        
-        await AuditLogService.log({
-          companyId,
-          action: SCHEDULED_REPORT_ACTIONS.EXECUTED,
-          targetType: SCHEDULED_REPORT_TARGET,
-          targetId: id,
-          changes: {
-            executedAt: new Date().toISOString(),
-            status: 'failed',
-            error: String(error),
-          },
-        });
       }
     });
 
@@ -184,65 +203,20 @@ export class ScheduledReportsService {
   /**
    * Calculate next run time from cron expression
    */
-  private static calculateNextRun(cronExpression: string): Date {
-    // Simple implementation - in production, use a proper cron parser
-    const now = new Date();
-    const nextRun = new Date(now);
-    
-    // Basic parsing for common schedules
-    if (cronExpression === '0 9 * * 1') {
-      // Every Monday at 9 AM
-      const dayOfWeek = now.getDay();
-      const daysUntilMonday = dayOfWeek === 0 ? 1 : 8 - dayOfWeek;
-      nextRun.setDate(now.getDate() + daysUntilMonday);
-      nextRun.setHours(9, 0, 0, 0);
-    } else if (cronExpression === '0 9 1 * *') {
-      // First day of month at 9 AM
-      nextRun.setMonth(now.getMonth() + 1);
-      nextRun.setDate(1);
-      nextRun.setHours(9, 0, 0, 0);
-    } else if (cronExpression === '0 9 * * *') {
-      // Daily at 9 AM
-      nextRun.setDate(now.getDate() + 1);
-      nextRun.setHours(9, 0, 0, 0);
-    }
-    
-    return nextRun;
+  private static calculateNextRun(cronExpression: string, from = new Date()): Date {
+    const interval = cronParser.parse(cronExpression, { currentDate: from });
+    return interval.next().toDate();
   }
 
   /**
    * Get all scheduled reports for a company
    */
   static async getScheduledReports(companyId: string): Promise<ScheduledReport[]> {
-    const logs = await AuditLogService.listByAction(
-      companyId,
-      SCHEDULED_REPORT_ACTIONS.CREATED,
-      SCHEDULED_REPORT_TARGET,
-      100
-    );
-    
-    const reportIds = logs
-      .map((log) => log.targetId)
-      .filter((targetId): targetId is string => Boolean(targetId));
-    
-    const allLogs = await AuditLogService.listByTargetIds(
-      companyId,
-      SCHEDULED_REPORT_TARGET,
-      reportIds
-    );
-    
-    const grouped = new Map<string, typeof allLogs>();
-    for (const log of allLogs) {
-      if (!log.targetId) continue;
-      const existing = grouped.get(log.targetId) ?? [];
-      existing.push(log);
-      grouped.set(log.targetId, existing);
-    }
-    
-    return reportIds
-      .map((reportId) => grouped.get(reportId))
-      .filter((logs): logs is NonNullable<typeof logs> => Boolean(logs))
-      .map((logs) => this.materializeReport(logs));
+    const rows = await prisma.scheduledReport.findMany({
+      where: { companyId },
+      orderBy: { createdAt: 'desc' },
+    });
+    return rows.map((row: any) => this.toScheduledReport(row));
   }
 
   /**
@@ -251,98 +225,78 @@ export class ScheduledReportsService {
   static async updateScheduledReport(
     id: string,
     companyId: string,
-    actorId: string | undefined,
-    updates: Partial<Omit<ScheduledReport, 'id' | 'companyId'>>
+    updates: Partial<ScheduledReport>
   ): Promise<ScheduledReport> {
-    // Get current state
-    const current = await this.getScheduledReportById(companyId, id);
-    
-    // Log update
-    await AuditLogService.log({
-      companyId,
-      actorId,
-      action: SCHEDULED_REPORT_ACTIONS.UPDATED,
-      targetType: SCHEDULED_REPORT_TARGET,
-      targetId: id,
-      changes: {
-        previousState: current,
-        updates,
+    this.removeSchedule(id);
+    const current = await prisma.scheduledReport.findFirst({
+      where: { id, companyId },
+    });
+    if (!current) {
+      throw new Error('Scheduled report not found');
+    }
+
+    const nextSchedule = updates.schedule || current.schedule;
+    if (!cron.validate(nextSchedule)) {
+      throw new Error(`Invalid cron expression: ${nextSchedule}`);
+    }
+    const row = await prisma.scheduledReport.updateMany({
+      where: { id, companyId },
+      data: {
+        ...(updates.name !== undefined && { name: updates.name }),
+        ...(updates.type !== undefined && { type: updates.type }),
+        ...(updates.schedule !== undefined && { schedule: updates.schedule }),
+        ...(updates.options !== undefined && { options: updates.options as unknown as Prisma.InputJsonValue }),
+        ...(updates.recipients !== undefined && { recipients: updates.recipients }),
+        ...(updates.enabled !== undefined && { enabled: updates.enabled }),
+        nextRun: this.calculateNextRun(nextSchedule),
       },
     });
-    
-    // Reschedule if needed
-    const updated = { ...current, ...updates };
-    if (updates.enabled !== undefined || updates.schedule !== undefined) {
-      this.removeSchedule(id);
-      if (updated.enabled) {
-        this.scheduleReport(id, companyId, updated);
-      }
+    if (!row.count) {
+      throw new Error('Scheduled report not found');
     }
-    
-    return updated;
-  }
 
-  /**
-   * Get a single scheduled report by ID
-   */
-  static async getScheduledReportById(companyId: string, id: string): Promise<ScheduledReport> {
-    const logs = await AuditLogService.listByTarget(
-      companyId,
-      SCHEDULED_REPORT_TARGET,
-      id
-    );
-    
-    if (logs.length === 0) {
-      throw new Error(`Scheduled report ${id} not found`);
+    const updated = await prisma.scheduledReport.findFirst({
+      where: { id, companyId },
+    });
+
+    if (updated?.enabled) {
+      this.scheduleReport(id, companyId, {
+        name: updated.name,
+        type: updated.type as ScheduledReport['type'],
+        schedule: updated.schedule,
+        options: updated.options as unknown as ReportOptions,
+        recipients: updated.recipients || [],
+        enabled: updated.enabled,
+      });
     }
-    
-    return this.materializeReport(logs);
+
+    return this.toScheduledReport(updated);
   }
 
   /**
    * Delete a scheduled report
    */
-  static async deleteScheduledReport(id: string, companyId: string, actorId: string | undefined): Promise<void> {
+  static async deleteScheduledReport(id: string, companyId: string): Promise<void> {
     this.removeSchedule(id);
-    
-    await AuditLogService.log({
-      companyId,
-      actorId,
-      action: SCHEDULED_REPORT_ACTIONS.DELETED,
-      targetType: SCHEDULED_REPORT_TARGET,
-      targetId: id,
-      changes: {
-        deletedAt: new Date().toISOString(),
-      },
+    await prisma.scheduledReport.deleteMany({
+      where: { id, companyId },
     });
   }
 
-  /**
-   * Materialize a scheduled report from audit logs
-   */
-  private static materializeReport(logs: Awaited<ReturnType<typeof AuditLogService.listByTarget>>): ScheduledReport {
-    const createdLog = logs.find((l) => l.action === SCHEDULED_REPORT_ACTIONS.CREATED);
-    
-    if (!createdLog || !createdLog.targetId) {
-      throw new Error('Scheduled report creation log not found');
-    }
-    
-    const createdData = (createdLog.changes as Record<string, any>) ?? {};
-    const lastExecutionLog = [...logs]
-      .reverse()
-      .find((l) => l.action === SCHEDULED_REPORT_ACTIONS.EXECUTED);
-    
+  private static toScheduledReport(row: any): ScheduledReport {
     return {
-      id: createdLog.targetId,
-      companyId: createdLog.companyId,
-      name: createdData.name,
-      type: createdData.type,
-      schedule: createdData.schedule,
-      options: createdData.options,
-      recipients: createdData.recipients ?? [],
-      enabled: createdData.enabled ?? true,
-      lastRun: lastExecutionLog?.createdAt,
-      nextRun: createdData.nextRun,
+      id: row.id,
+      companyId: row.companyId,
+      name: row.name,
+      type: row.type,
+      schedule: row.schedule,
+      options: row.options as ReportOptions,
+      recipients: row.recipients || [],
+      enabled: row.enabled,
+      lastRun: row.lastRun ?? undefined,
+      nextRun: row.nextRun ?? undefined,
     };
   }
 }
+
+export { ScheduledReportsService, ScheduledReport };
