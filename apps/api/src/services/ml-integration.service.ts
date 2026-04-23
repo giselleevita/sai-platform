@@ -1,6 +1,7 @@
-import { MLIntegration } from '@prisma/client';
 import { prisma } from './prisma.client';
 import { CacheService } from './cache.service';
+
+type MLIntegrationRow = any;
 
 export interface CreateMLIntegrationInput {
   provider: 'MLFLOW' | 'SAGEMAKER' | 'VERTEX_AI' | 'OTHER';
@@ -13,14 +14,14 @@ export interface CreateMLIntegrationInput {
 export interface UpdateMLIntegrationInput extends Partial<CreateMLIntegrationInput> {}
 
 export class MLIntegrationService {
-  static async listByCompany(companyId: string): Promise<MLIntegration[]> {
+  static async listByCompany(companyId: string): Promise<MLIntegrationRow[]> {
     const cacheKey = `company:${companyId}:ml-integrations`;
-    const cached = await CacheService.get<MLIntegration[]>(cacheKey);
+    const cached = await CacheService.get<MLIntegrationRow[]>(cacheKey);
     if (cached) {
       return cached;
     }
 
-    const rows = await prisma.mLIntegration.findMany({
+    const rows = await (prisma as any).mlIntegration.findMany({
       where: { companyId, deletedAt: null },
       orderBy: { createdAt: 'desc' },
     });
@@ -29,8 +30,8 @@ export class MLIntegrationService {
     return rows;
   }
 
-  static async create(companyId: string, input: CreateMLIntegrationInput): Promise<MLIntegration> {
-    const row = await prisma.mLIntegration.create({
+  static async create(companyId: string, input: CreateMLIntegrationInput): Promise<MLIntegrationRow> {
+    const row = await (prisma as any).mlIntegration.create({
       data: {
         companyId,
         provider: input.provider,
@@ -49,8 +50,8 @@ export class MLIntegrationService {
     companyId: string,
     id: string,
     input: UpdateMLIntegrationInput
-  ): Promise<MLIntegration | null> {
-    const row = await prisma.mLIntegration.update({
+  ): Promise<MLIntegrationRow | null> {
+    const row = await (prisma as any).mlIntegration.update({
       where: { id, companyId },
       data: {
         provider: input.provider,
@@ -66,7 +67,7 @@ export class MLIntegrationService {
   }
 
   static async delete(companyId: string, id: string): Promise<void> {
-    await prisma.mLIntegration.update({
+    await (prisma as any).mlIntegration.update({
       where: { id, companyId },
       data: { deletedAt: new Date(), status: 'DISABLED' },
     });
