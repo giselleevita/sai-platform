@@ -58,6 +58,27 @@ export default function CompliancePage() {
             <button
               type="button"
               onClick={async () => {
+                const res = await api.get<any>('/api/governance/export-manifest?limit=1000');
+                if (!res.success) {
+                  setError(res.error || 'Failed to export manifest');
+                  return;
+                }
+                const payload = JSON.stringify(res.data, null, 2);
+                const blob = new Blob([payload], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `governance-manifest-${new Date().toISOString().slice(0, 10)}.json`;
+                a.click();
+                URL.revokeObjectURL(url);
+              }}
+              className="rounded-md border border-gray-300 dark:border-gray-800 bg-white dark:bg-gray-900 px-3 py-2 text-sm font-semibold text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800"
+            >
+              Download manifest
+            </button>
+            <button
+              type="button"
+              onClick={async () => {
                 const res = await api.get<any>('/api/reports/audit-package');
                 if (!res.success) {
                   setError(res.error || 'Failed to export audit package');
@@ -81,6 +102,18 @@ export default function CompliancePage() {
       />
 
       <div className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8 space-y-8">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="text-sm text-gray-700 dark:text-gray-200">
+            Need reviews done? Visit your queue.
+          </div>
+          <Link
+            href="/review-queue"
+            className="rounded-md border border-gray-300 dark:border-gray-800 bg-white dark:bg-gray-900 px-3 py-2 text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800"
+          >
+            My review queue →
+          </Link>
+        </div>
+
         {error && (
           <div className="rounded-md bg-red-50 border border-red-200 p-4 text-sm text-red-800">{error}</div>
         )}
