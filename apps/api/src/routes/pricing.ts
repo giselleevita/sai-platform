@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import type { AuthenticatedRequest } from '../middleware/auth';
 import { authMiddleware, requirePermission, Permission } from '../middleware';
 import { validate } from '../middleware/validation';
 import { z } from 'zod';
@@ -54,7 +55,7 @@ router.post(
   '/quote',
   requirePermission(Permission.COMPLIANCE_READ),
   validate({ body: pricingQuoteSchema }),
-  async (req, res) => {
+  async (req: AuthenticatedRequest, res) => {
     const companyId = req.user?.companyId;
     const actorId = req.user?.id;
 
@@ -80,7 +81,7 @@ router.post(
   }
 );
 
-router.get('/requests', requirePermission(Permission.COMPLIANCE_READ), async (req, res) => {
+router.get('/requests', requirePermission(Permission.COMPLIANCE_READ), async (req: AuthenticatedRequest, res) => {
   const companyId = req.user?.companyId;
   if (!companyId) {
     res.status(401).json({ success: false, error: 'Unauthorized' });
@@ -91,7 +92,7 @@ router.get('/requests', requirePermission(Permission.COMPLIANCE_READ), async (re
   res.json({ success: true, data: requests });
 });
 
-router.get('/requests/:id', requirePermission(Permission.COMPLIANCE_READ), async (req, res) => {
+router.get('/requests/:id', requirePermission(Permission.COMPLIANCE_READ), async (req: AuthenticatedRequest, res) => {
   const companyId = req.user?.companyId;
   if (!companyId) {
     res.status(401).json({ success: false, error: 'Unauthorized' });
@@ -106,7 +107,7 @@ router.patch(
   '/requests/:id',
   requirePermission(Permission.COMPLIANCE_WRITE),
   validate({ body: pricingQuoteLifecycleSchema }),
-  async (req, res) => {
+  async (req: AuthenticatedRequest, res) => {
     const companyId = req.user?.companyId;
     const actorId = req.user?.id;
 
@@ -133,7 +134,7 @@ router.patch(
 router.get(
   '/requests/export',
   requirePermission(Permission.COMPLIANCE_EXPORT),
-  async (req, res) => {
+  async (req: AuthenticatedRequest, res) => {
     const companyId = req.user?.companyId;
     if (!companyId) {
       res.status(401).json({ success: false, error: 'Unauthorized' });
@@ -156,7 +157,7 @@ router.get(
 router.get(
   '/requests/search',
   requirePermission(Permission.COMPLIANCE_READ),
-  async (req, res) => {
+  async (req: AuthenticatedRequest, res) => {
     const companyId = req.user?.companyId;
     if (!companyId) {
       res.status(401).json({ success: false, error: 'Unauthorized' });
