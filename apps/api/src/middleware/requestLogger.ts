@@ -29,7 +29,7 @@ export function requestLogger(req: RequestWithId, res: Response, next: NextFunct
     requestId,
     method: req.method,
     path: req.path,
-    query: req.query,
+    queryKeys: Object.keys(req.query || {}),
     ip: req.ip,
     userAgent: req.get('user-agent'),
   });

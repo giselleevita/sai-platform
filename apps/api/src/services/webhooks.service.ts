@@ -18,7 +18,7 @@ export class WebhooksService {
     data: Record<string, any>
   ): Promise<void> {
     // Get active webhooks for company
-    const webhooks = await (prisma as any).webhook.findMany({
+    const webhooks = await prisma.webhook.findMany({
       where: {
         companyId,
         active: true,
@@ -37,10 +37,17 @@ export class WebhooksService {
 
       // Send to all matching webhooks
       await Promise.allSettled(
-        webhooks.map(async (webhook: any) => {
+        webhooks.map(async (webhook) => {
         try {
+          const url = new URL(webhook.url);
+          const timeoutMs = Number(process.env.WEBHOOK_TIMEOUT_MS || '5000');
+          const controller = new AbortController();
+          const timer = setTimeout(() => controller.abort(), timeoutMs);
+
           const response = await fetch(webhook.url, {
             method: 'POST',
+            redirect: 'error',
+            signal: controller.signal,
             headers: {
               'Content-Type': 'application/json',
               'X-Webhook-Signature': this.generateSignature(
@@ -50,14 +57,15 @@ export class WebhooksService {
             },
             body: JSON.stringify(payload),
           });
+          clearTimeout(timer);
 
           if (!response.ok) {
             throw new Error(`Webhook failed: ${response.status}`);
           }
 
-          logger.info(`Webhook triggered: ${webhook.url} for event ${event}`);
+          logger.info(`Webhook triggered`, { webhookId: webhook.id, host: url.host, event });
         } catch (error) {
-          logger.error(`Webhook failed for ${webhook.url}:`, error);
+          logger.error(`Webhook failed`, error, { webhookId: webhook.id, event });
           // In production, you'd want to retry failed webhooks
         }
       })
@@ -73,7 +81,7 @@ export class WebhooksService {
     events: string[],
     secret: string
   ) {
-    return await (prisma as any).webhook.create({
+    return await prisma.webhook.create({
       data: {
         companyId,
         url,
@@ -88,7 +96,7 @@ export class WebhooksService {
    * List webhooks for company
    */
   static async listWebhooks(companyId: string) {
-    return await (prisma as any).webhook.findMany({
+    return await prisma.webhook.findMany({
       where: { companyId },
       orderBy: { createdAt: 'desc' },
       select: {
@@ -107,7 +115,7 @@ export class WebhooksService {
    * Delete webhook
    */
   static async deleteWebhook(companyId: string, webhookId: string) {
-    await (prisma as any).webhook.delete({
+    await prisma.webhook.delete({
       where: { id: webhookId, companyId },
     });
   }
