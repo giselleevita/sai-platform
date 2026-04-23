@@ -23,12 +23,20 @@ import webhooksRoutes from './routes/webhooks';
 import mlIntegrationRoutes from './routes/ml-integrations';
 import gpaiRoutes from './routes/gpai';
 import conformityRoutes from './routes/conformity';
+import invitationsRoutes from './routes/invitations';
+import usersRoutes from './routes/users';
+import integrationsRoutes from './routes/integrations';
+import scimRoutes from './routes/scim';
+import entitlementsRoutes from './routes/entitlements';
 import { errorHandler } from './middleware';
 import { apiRateLimiter } from './middleware/rateLimit';
 import { securityAuditMiddleware } from './middleware/securityAudit';
 import { csrfProtection } from './middleware/csrf';
 import { requestLogger } from './middleware/requestLogger';
 import { logger } from './utils';
+import { isOidcConfigured } from './services/oidc.config';
+import { resolveEmailDeliveryMode } from './services/email.service';
+import { ScheduledReportsService } from './modules/reports';
 
 const app = express();
 
@@ -46,8 +54,40 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(requestLogger);
 app.use(securityAuditMiddleware);
 
+// Public: OIDC configured? (lets the web UI show "Sign in with SSO" without a second env flag)
+app.get('/api/health/oidc', (_req, res) => {
+  res.json({ oidcEnabled: isOidcConfigured() });
+});
+
+// Public: liveness for probes that expect a path under /api (same shape as GET /health)
+app.get('/api/health', (_req, res) => {
+  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
+// Public: resolved email delivery mode (no secrets — for ops / staging checks)
+app.get('/api/health/email', (_req, res) => {
+  res.json({
+    mode: resolveEmailDeliveryMode(),
+    timestamp: new Date().toISOString(),
+  });
+});
+
+app.get('/api/health/metrics', (_req, res) => {
+  const m = process.memoryUsage();
+  res.json({
+    uptimeSeconds: process.uptime(),
+    rssBytes: m.rss,
+    heapUsedBytes: m.heapUsed,
+    heapTotalBytes: m.heapTotal,
+    timestamp: new Date().toISOString(),
+  });
+});
+
 // Rate limiting (apply to all routes)
 app.use('/api', apiRateLimiter);
+
+// SCIM endpoints are typically called server-to-server.
+app.use('/scim/v2', scimRoutes);
 
 // Root endpoint - API info
 app.get('/', (req, res) => {
@@ -57,6 +97,12 @@ app.get('/', (req, res) => {
     status: 'running',
     endpoints: {
       health: '/health',
+      apiHealth: '/api/health',
+      oidcProbe: '/api/health/oidc',
+      emailProbe: '/api/health/email',
+      metrics: '/api/health/metrics',
+      integrations: '/api/v1/integrations',
+      apiDocs: '/api-docs',
       auth: '/api/auth',
       inventory: '/api/inventory',
       governance: '/api/governance',
@@ -109,6 +155,10 @@ apiV1Routes.use('/webhooks', csrfProtection, webhooksRoutes);
 apiV1Routes.use('/ml-integrations', csrfProtection, mlIntegrationRoutes);
 apiV1Routes.use('/gpai', csrfProtection, gpaiRoutes);
 apiV1Routes.use('/conformity', csrfProtection, conformityRoutes);
+apiV1Routes.use('/invitations', csrfProtection, invitationsRoutes);
+apiV1Routes.use('/users', csrfProtection, usersRoutes);
+apiV1Routes.use('/integrations', csrfProtection, integrationsRoutes);
+apiV1Routes.use('/entitlements', csrfProtection, entitlementsRoutes);
 
 // Mount v1 routes
 app.use('/api/v1', apiV1Routes);
@@ -134,20 +184,21 @@ app.use('/api/webhooks', csrfProtection, webhooksRoutes);
 app.use('/api/ml-integrations', csrfProtection, mlIntegrationRoutes);
 app.use('/api/gpai', csrfProtection, gpaiRoutes);
 app.use('/api/conformity', csrfProtection, conformityRoutes);
+app.use('/api/invitations', csrfProtection, invitationsRoutes);
+app.use('/api/users', csrfProtection, usersRoutes);
+app.use('/api/integrations', csrfProtection, integrationsRoutes);
+app.use('/api/entitlements', csrfProtection, entitlementsRoutes);
 
 // Error handling middleware (must be last)
 app.use(errorHandler);
 
 app.listen(config.port, () => {
   logger.info(`✅ API server running on http://localhost:${config.port}`);
-  
-  // Initialize scheduled reports for all companies
-  (async () => {
-    try {
-      const { ScheduledReportsService } = await import('./services/scheduled-reports.service');
-      await ScheduledReportsService.initializeAllCompanyReports();
-    } catch (error) {
-      logger.error('Failed to initialize scheduled reports on startup:', error);
-    }
-  })();
+  if (process.env.RUN_SCHEDULED_REPORTS !== 'false') {
+    ScheduledReportsService.initializeAllReports().catch((error) => {
+      logger.error('Failed to initialize scheduled reports:', error);
+    });
+  } else {
+    logger.info('Scheduled reports disabled for this process (RUN_SCHEDULED_REPORTS=false)');
+  }
 });
