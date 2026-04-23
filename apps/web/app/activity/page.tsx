@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { AppLayout } from '@/components/shared';
 import { api } from '@/lib/api';
+import { redirectToLoginIfNoSession } from '@/lib/auth';
 
 interface ActivityItem {
   id: string;
@@ -35,11 +36,7 @@ export default function ActivityPage() {
     try {
       setLoading(true);
       setError('');
-      const csrfToken = localStorage.getItem('csrf-token') || localStorage.getItem('token');
-      if (!csrfToken) {
-        router.push('/auth/login');
-        return;
-      }
+      if (redirectToLoginIfNoSession(router)) return;
 
       const params = new URLSearchParams();
       if (filter !== 'all') {

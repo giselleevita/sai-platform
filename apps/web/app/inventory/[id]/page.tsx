@@ -34,11 +34,8 @@ export default function ToolDetailPage() {
       try {
         if (typeof window === 'undefined') return;
         
-        const token = localStorage.getItem('token');
-        if (!token) {
-          router.push('/auth/login');
-          return;
-        }
+        const { redirectToLoginIfNoSession } = await import('@/lib/auth');
+        if (redirectToLoginIfNoSession(router)) return;
 
         const result = await api.get<Tool>(`/api/inventory/${toolId}`);
         

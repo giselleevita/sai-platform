@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { api } from '@/lib/api';
+import { redirectToLoginIfNoSession } from '@/lib/auth';
 import { AppLayout } from '@/components/shared';
 
 interface Evidence {
@@ -41,11 +42,7 @@ export default function EvidencePage() {
   const loadData = async () => {
     try {
       setLoading(true);
-      const token = localStorage.getItem('token');
-      if (!token) {
-        router.push('/auth/login');
-        return;
-      }
+      if (redirectToLoginIfNoSession(router)) return;
 
       const [evidenceResult, controlsResult] = await Promise.all([
         api.get<Evidence[]>('/api/evidence'),

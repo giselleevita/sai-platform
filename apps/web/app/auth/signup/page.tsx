@@ -53,8 +53,6 @@ export default function SignupPage() {
       const signupData = result.data as any;
       if (signupData?.csrfToken) {
         localStorage.setItem('csrf-token', signupData.csrfToken);
-        // Remove old token if exists (migration cleanup)
-        localStorage.removeItem('token');
         setSuccess(true);
         
         // Redirect to dashboard after 1 second

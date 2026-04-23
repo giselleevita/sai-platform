@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
 import { api } from '@/lib/api';
+import { redirectToLoginIfNoSession } from '@/lib/auth';
 import { RiskBadge, AppLayout, CommentsSection } from '@/components/shared';
 
 interface Risk {
@@ -56,11 +57,7 @@ export default function RiskDetailPage() {
   const loadRisk = async () => {
     try {
       setLoading(true);
-      const token = localStorage.getItem('token');
-      if (!token) {
-        router.push('/auth/login');
-        return;
-      }
+      if (redirectToLoginIfNoSession(router)) return;
 
       const result = await api.get<Risk[]>(`/api/risks`);
       if (result.success && result.data) {

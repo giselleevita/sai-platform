@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { api } from '@/lib/api';
+import { redirectToLoginIfNoSession } from '@/lib/auth';
 import { AppLayout } from '@/components/shared';
 
 interface AuditLog {
@@ -27,11 +28,7 @@ export default function AuditPage() {
   const loadLogs = async () => {
     try {
       setLoading(true);
-      const token = localStorage.getItem('token');
-      if (!token) {
-        router.push('/auth/login');
-        return;
-      }
+      if (redirectToLoginIfNoSession(router)) return;
 
       const result = await api.get<AuditLog[]>('/api/audit-log');
       if (result.success && result.data) {

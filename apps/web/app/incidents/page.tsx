@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { api } from '@/lib/api';
+import { redirectToLoginIfNoSession } from '@/lib/auth';
 import { AppLayout } from '@/components/shared';
 
 interface Tool {
@@ -54,12 +55,7 @@ export default function IncidentsPage() {
     try {
       setLoading(true);
       setError('');
-      // Check for CSRF token (cookies are checked by server)
-      const csrfToken = localStorage.getItem('csrf-token') || localStorage.getItem('token');
-      if (!csrfToken) {
-        router.push('/auth/login');
-        return;
-      }
+      if (redirectToLoginIfNoSession(router)) return;
 
       const params = new URLSearchParams({
         page: page.toString(),
