@@ -1,5 +1,6 @@
 import { prisma } from './prisma.client';
 import { AuditLogService } from './audit-log.service';
+import type { Prisma } from '@prisma/client';
 
 export class BulkOperationsService {
   /**
@@ -54,7 +55,7 @@ export class BulkOperationsService {
 
     for (const riskId of riskIds) {
       try {
-        const result = await (prisma as any).risk.updateMany({
+        const result = await prisma.risk.updateMany({
           where: { id: riskId, companyId },
           data: { deletedAt: new Date() },
         });
@@ -95,8 +96,8 @@ export class BulkOperationsService {
     for (const toolId of toolIds) {
       try {
         await prisma.aITool.update({
-          where: { id: toolId, companyId, deletedAt: null } as any,
-          data: updates,
+          where: { id: toolId, companyId, deletedAt: null },
+          data: updates as Prisma.AIToolUpdateInput,
         });
 
         await AuditLogService.log({
@@ -131,9 +132,9 @@ export class BulkOperationsService {
 
     for (const riskId of riskIds) {
       try {
-        await (prisma as any).risk.update({
+        await prisma.risk.update({
           where: { id: riskId, companyId, deletedAt: null },
-          data: updates,
+          data: updates as Prisma.RiskUpdateInput,
         });
 
         await AuditLogService.log({

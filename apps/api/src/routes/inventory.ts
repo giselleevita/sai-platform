@@ -3,7 +3,13 @@ import { authMiddleware, requirePermission, Permission } from '../middleware';
 import { InventoryController } from '../controllers';
 import { validateCreateTool, validateUpdateTool } from '../validation';
 import { validate } from '../middleware/validation';
-import { createToolSchema, updateToolSchema, paginationSchema, searchSchema } from '../validation/schemas';
+import {
+  createToolSchema,
+  updateToolSchema,
+  paginationSchema,
+  searchSchema,
+  toolGovernancePatchSchema,
+} from '../validation/schemas';
 import { asyncHandler } from '../utils';
 
 const router = Router();
@@ -50,6 +56,18 @@ router.get('/:id', requirePermission(Permission.TOOL_READ), asyncHandler(Invento
  * Requires: TOOL_READ
  */
 router.get('/:id/governance', requirePermission(Permission.TOOL_READ), asyncHandler(InventoryController.getToolGovernance));
+
+/**
+ * PATCH /api/inventory/:id/governance
+ * Persist governance profile for tool
+ * Requires: TOOL_WRITE
+ */
+router.patch(
+  '/:id/governance',
+  requirePermission(Permission.TOOL_WRITE),
+  validate({ body: toolGovernancePatchSchema }),
+  asyncHandler(InventoryController.patchToolGovernance),
+);
 
 /**
  * GET /api/inventory/:id/decisions

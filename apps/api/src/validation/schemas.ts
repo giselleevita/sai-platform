@@ -191,14 +191,20 @@ export const updateRegulationSchema = createRegulationSchema.partial();
 // Evidence schemas
 export const createEvidenceSchema = z.object({
   controlId: z.string().min(1, 'Control ID is required'),
-  source: z.string().min(1, 'Source is required').max(200).optional(),
+  source: z.string().min(1).max(200).default('SAI'),
   reference: z.string().max(1000).optional(),
+  validFrom: z.string().optional(),
+  validTo: z.string().optional(),
   status: z
     .enum(['PENDING', 'REJECTED', 'MISSING', 'SUBMITTED', 'APPROVED', 'EXPIRED'])
     .default('SUBMITTED'),
+  collectionMethod: z.string().max(100).optional(),
 });
 
-export const updateEvidenceSchema = createEvidenceSchema.partial();
+export const updateEvidenceSchema = createEvidenceSchema.partial().extend({
+  assignedReviewerId: z.string().max(100).nullable().optional(),
+  reviewNote: z.string().max(2000).nullable().optional(),
+});
 
 // Bulk operations schemas
 export const bulkDeleteSchema = z.object({
@@ -208,4 +214,16 @@ export const bulkDeleteSchema = z.object({
 export const bulkUpdateSchema = z.object({
   ids: z.array(z.string()).min(1, 'At least one ID is required').max(100, 'Cannot update more than 100 items at once'),
   updates: z.record(z.string(), z.any()),
+});
+
+// Invitations + user admin schemas
+export const createInvitationSchema = z.object({
+  email: z.string().email('Invalid email address'),
+  role: z.enum(['MANAGEMENT', 'ADMIN', 'OPERATOR', 'AUDITOR']).default('OPERATOR'),
+  expiresInDays: z.coerce.number().int().min(1).max(30).optional(),
+});
+
+export const updateUserSchema = z.object({
+  role: z.enum(['MANAGEMENT', 'ADMIN', 'OPERATOR', 'AUDITOR']).optional(),
+  disabled: z.boolean().optional(),
 });

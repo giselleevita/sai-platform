@@ -17,3 +17,5 @@ export { WebhooksController } from './webhooks.controller';
 export { MLIntegrationController } from './ml-integration.controller';
 export { GpaiController } from './gpai.controller';
 export { ConformityController } from './conformity.controller';
+export { InvitationsController } from './invitations.controller';
+export { UsersController } from './users.controller';

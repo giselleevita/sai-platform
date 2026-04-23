@@ -1,3 +1,7 @@
+import { SESv2Client, SendEmailCommand } from '@aws-sdk/client-sesv2';
+import sgMail from '@sendgrid/mail';
+import nodemailer from 'nodemailer';
+
 import { logger } from '../utils/logger';
 
 export interface EmailOptions {
@@ -7,29 +11,206 @@ export interface EmailOptions {
   text?: string;
 }
 
-export class EmailService {
-  /**
-   * Send email notification
-   * In production, integrate with SendGrid, AWS SES, or similar
-   */
-  static async sendEmail(options: EmailOptions): Promise<void> {
-    // TODO: Integrate with email service (SendGrid, AWS SES, etc.)
-    logger.info('Email notification (not sent in dev):', {
+/** How outbound mail is handled. See EMAIL_PROVIDER in env.example */
+export type EmailDeliveryMode = 'console' | 'log' | 'none' | 'smtp' | 'sendgrid' | 'ses';
+
+let warnedProductionNoProvider = false;
+
+function smtpEnvComplete(): boolean {
+  return Boolean(
+    process.env.SMTP_HOST?.trim() && process.env.SMTP_USER?.trim() && process.env.SMTP_PASS?.trim(),
+  );
+}
+
+function sendgridEnvComplete(): boolean {
+  return Boolean(process.env.SENDGRID_API_KEY?.trim() && process.env.SENDGRID_FROM?.trim());
+}
+
+function sesEnvComplete(): boolean {
+  return Boolean(process.env.SES_FROM?.trim() && process.env.AWS_REGION?.trim());
+}
+
+/**
+ * Resolve delivery mode from EMAIL_PROVIDER.
+ * - unset: `console` in development, `none` in production (no mail sent)
+ * - `console` | `log` | `none`: explicit
+ * - `smtp`: used when SMTP_HOST, SMTP_USER, SMTP_PASS are set; otherwise `none` + warning
+ * - `sendgrid`: used when SENDGRID_API_KEY and SENDGRID_FROM are set
+ * - `ses`: used when SES_FROM and AWS_REGION are set (credentials via default AWS provider chain)
+ */
+export function resolveEmailDeliveryMode(): EmailDeliveryMode {
+  const raw = process.env.EMAIL_PROVIDER?.trim().toLowerCase();
+  const nodeEnv = process.env.NODE_ENV || 'development';
+
+  if (!raw) {
+    return nodeEnv === 'development' ? 'console' : 'none';
+  }
+
+  if (raw === 'console' || raw === 'log' || raw === 'none') {
+    return raw;
+  }
+
+  if (raw === 'smtp') {
+    if (smtpEnvComplete()) {
+      return 'smtp';
+    }
+    logger.warn(
+      '[email] EMAIL_PROVIDER=smtp but SMTP_HOST, SMTP_USER, and SMTP_PASS must all be set; no mail sent',
+    );
+    return 'none';
+  }
+
+  if (raw === 'sendgrid') {
+    if (sendgridEnvComplete()) {
+      return 'sendgrid';
+    }
+    logger.warn(
+      '[email] EMAIL_PROVIDER=sendgrid but SENDGRID_API_KEY and SENDGRID_FROM must be set; no mail sent',
+    );
+    return 'none';
+  }
+
+  if (raw === 'ses') {
+    if (sesEnvComplete()) {
+      return 'ses';
+    }
+    logger.warn(
+      '[email] EMAIL_PROVIDER=ses but SES_FROM and AWS_REGION must be set; no mail sent',
+    );
+    return 'none';
+  }
+
+  logger.warn(`[email] Unknown EMAIL_PROVIDER="${raw}"; treating as none`);
+  return 'none';
+}
+
+async function sendViaSmtp(options: EmailOptions): Promise<void> {
+  const host = process.env.SMTP_HOST!.trim();
+  const port = Number(process.env.SMTP_PORT || '587');
+  const user = process.env.SMTP_USER!.trim();
+  const pass = process.env.SMTP_PASS!.trim();
+  const secure = process.env.SMTP_SECURE === 'true' || port === 465;
+  const from = process.env.SMTP_FROM?.trim() || user;
+
+  const transporter = nodemailer.createTransport({
+    host,
+    port,
+    secure,
+    auth: { user, pass },
+  });
+
+  try {
+    await transporter.sendMail({
+      from,
       to: options.to,
       subject: options.subject,
+      text: options.text,
+      html: options.html,
     });
+    logger.info('Email sent via SMTP', { to: options.to, subject: options.subject });
+  } catch (err) {
+    logger.error('SMTP send failed', err);
+  }
+}
 
-    // In development, just log
-    if (process.env.NODE_ENV === 'development') {
-      console.log('\n📧 Email Notification:');
-      console.log(`To: ${Array.isArray(options.to) ? options.to.join(', ') : options.to}`);
-      console.log(`Subject: ${options.subject}`);
-      console.log(`Body: ${options.text || options.html.substring(0, 100)}...\n`);
+async function sendViaSendgrid(options: EmailOptions): Promise<void> {
+  const apiKey = process.env.SENDGRID_API_KEY!.trim();
+  const from = process.env.SENDGRID_FROM!.trim();
+  sgMail.setApiKey(apiKey);
+  const to = Array.isArray(options.to) ? options.to : [options.to];
+  try {
+    await sgMail.send({
+      to,
+      from,
+      subject: options.subject,
+      text: options.text,
+      html: options.html,
+    });
+    logger.info('Email sent via SendGrid', { to: options.to, subject: options.subject });
+  } catch (err) {
+    logger.error('SendGrid send failed', err);
+  }
+}
+
+async function sendViaSes(options: EmailOptions): Promise<void> {
+  const region = process.env.AWS_REGION!.trim();
+  const from = process.env.SES_FROM!.trim();
+  const client = new SESv2Client({ region });
+  const to = Array.isArray(options.to) ? options.to : [options.to];
+  const textBody = options.text ?? options.html.replace(/<[^>]+>/g, ' ').trim();
+  try {
+    await client.send(
+      new SendEmailCommand({
+        FromEmailAddress: from,
+        Destination: { ToAddresses: to },
+        Content: {
+          Simple: {
+            Subject: { Data: options.subject, Charset: 'UTF-8' },
+            Body: {
+              Html: { Data: options.html, Charset: 'UTF-8' },
+              Text: { Data: textBody, Charset: 'UTF-8' },
+            },
+          },
+        },
+      }),
+    );
+    logger.info('Email sent via Amazon SES', { to: options.to, subject: options.subject });
+  } catch (err) {
+    logger.error('SES send failed', err);
+  }
+}
+
+export class EmailService {
+  /**
+   * Send email notification.
+   * Configure EMAIL_PROVIDER (see env.example). Production defaults to no mail until you wire SES/SendGrid/etc.
+   */
+  static async sendEmail(options: EmailOptions): Promise<void> {
+    const mode = resolveEmailDeliveryMode();
+
+    if (mode === 'none') {
+      if (process.env.NODE_ENV === 'production' && !warnedProductionNoProvider) {
+        logger.warn(
+          '[email] EMAIL_PROVIDER is none or unset in production; no emails are sent. Set EMAIL_PROVIDER=console for demos or integrate a provider.',
+        );
+        warnedProductionNoProvider = true;
+      }
+      logger.debug('Email skipped (delivery mode none)', {
+        to: options.to,
+        subject: options.subject,
+      });
       return;
     }
 
-    // In production, send actual email
-    // await sendGrid.send(options);
+    if (mode === 'log') {
+      logger.info('Email notification (log mode — not sent)', {
+        to: options.to,
+        subject: options.subject,
+        preview: (options.text || options.html).slice(0, 200),
+      });
+      return;
+    }
+
+    if (mode === 'smtp') {
+      await sendViaSmtp(options);
+      return;
+    }
+
+    if (mode === 'sendgrid') {
+      await sendViaSendgrid(options);
+      return;
+    }
+
+    if (mode === 'ses') {
+      await sendViaSes(options);
+      return;
+    }
+
+    // console — human-visible in dev / intentional demos
+    console.log('\n📧 Email Notification (console mode — not sent via provider):');
+    console.log(`To: ${Array.isArray(options.to) ? options.to.join(', ') : options.to}`);
+    console.log(`Subject: ${options.subject}`);
+    console.log(`Body: ${options.text || options.html.substring(0, 100)}...\n`);
   }
 
   /**

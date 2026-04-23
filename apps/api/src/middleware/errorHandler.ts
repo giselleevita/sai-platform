@@ -2,6 +2,17 @@ import { Request, Response, NextFunction } from 'express';
 import { AppError, ValidationError } from '../errors/AppError';
 import { logger } from '../utils/logger';
 
+function safeJsonForLogs(value: unknown, maxLen = 2000): unknown {
+  if (value === undefined) return undefined;
+  try {
+    const s = JSON.stringify(value);
+    if (s.length <= maxLen) return value;
+    return { truncated: true, length: s.length };
+  } catch {
+    return { unserializable: true };
+  }
+}
+
 export const errorHandler = (
   err: Error | AppError,
   req: Request,
@@ -35,12 +46,16 @@ export const errorHandler = (
   }
 
   // Unexpected errors
-  logger.error('Unexpected error:', err, { 
-    path: req.path, 
+  logger.error('Unexpected error:', err, {
+    path: req.path,
     method: req.method,
-    body: req.body,
-    query: req.query,
     userId: (req as any).user?.id,
+    ...(process.env.NODE_ENV === 'development'
+      ? {
+          body: safeJsonForLogs(req.body),
+          query: safeJsonForLogs(req.query),
+        }
+      : {}),
   });
   
   res.status(500).json({
