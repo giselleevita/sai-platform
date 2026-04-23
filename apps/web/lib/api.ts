@@ -1,7 +1,10 @@
 import { getCsrfToken } from './auth';
 import { clearAuth } from './auth';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+const API_URL =
+  process.env.NEXT_PUBLIC_API_URL ||
+  // Prefer same-origin in dev via Next rewrites to keep cookies/CSRF simple.
+  (typeof window !== 'undefined' ? '' : 'http://localhost:3001');
 
 export const api = {
   baseUrl: API_URL,
@@ -65,7 +68,8 @@ export const api = {
       if (error instanceof TypeError && error.message.includes('fetch')) {
         return {
           success: false,
-          error: 'Cannot connect to server. Make sure the backend is running on http://localhost:3001',
+          error:
+            'Cannot connect to server. Make sure the backend is running (dev: http://localhost:3000 proxies to API on :3001)',
         };
       }
 
