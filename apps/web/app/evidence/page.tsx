@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { api } from '@/lib/api';
 import { redirectToLoginIfNoSession } from '@/lib/auth';
-import { AppLayout } from '@/components/shared';
+import { AppLayout, PageHeader } from '@/components/shared';
 
 interface Evidence {
   id: string;
@@ -25,6 +25,16 @@ interface Control {
   name: string;
 }
 
+type EvidenceAttachment = {
+  id: string;
+  filename: string;
+  contentType: string;
+  sizeBytes: number;
+  sha256: string;
+  createdAt: string;
+  createdById?: string | null;
+};
+
 export default function EvidencePage() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
@@ -34,6 +44,9 @@ export default function EvidencePage() {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [editingEvidence, setEditingEvidence] = useState<Evidence | null>(null);
   const [statusFilter, setStatusFilter] = useState<string>('All');
+  const [attachmentsByEvidenceId, setAttachmentsByEvidenceId] = useState<Record<string, EvidenceAttachment[]>>({});
+  const [expandedEvidenceId, setExpandedEvidenceId] = useState<string | null>(null);
+  const [uploadingEvidenceId, setUploadingEvidenceId] = useState<string | null>(null);
 
   useEffect(() => {
     loadData();
@@ -63,6 +76,56 @@ export default function EvidencePage() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const loadAttachments = async (evidenceId: string) => {
+    const res = await api.get<EvidenceAttachment[]>(`/api/evidence/${evidenceId}/attachments`);
+    if (!res.success) {
+      setError(res.error || 'Failed to load attachments');
+      return;
+    }
+    setAttachmentsByEvidenceId((prev) => ({ ...prev, [evidenceId]: Array.isArray(res.data) ? res.data : [] }));
+  };
+
+  const toggleAttachments = async (evidenceId: string) => {
+    const next = expandedEvidenceId === evidenceId ? null : evidenceId;
+    setExpandedEvidenceId(next);
+    if (next) {
+      await loadAttachments(evidenceId);
+    }
+  };
+
+  const uploadAttachment = async (evidenceId: string, file: File) => {
+    setUploadingEvidenceId(evidenceId);
+    try {
+      const form = new FormData();
+      form.append('file', file);
+      const response = await fetch(`/api/evidence/${evidenceId}/attachments`, {
+        method: 'POST',
+        credentials: 'include',
+        body: form,
+      });
+      const data = await response.json().catch(() => null);
+      if (!response.ok) {
+        setError(data?.error || `Upload failed with status ${response.status}`);
+        return;
+      }
+      await loadAttachments(evidenceId);
+    } catch (e: any) {
+      setError(e?.message || 'Upload failed');
+    } finally {
+      setUploadingEvidenceId(null);
+    }
+  };
+
+  const deleteAttachment = async (evidenceId: string, attachmentId: string) => {
+    if (!confirm('Delete this attachment?')) return;
+    const res = await api.delete(`/api/evidence/attachments/${attachmentId}`);
+    if (!res.success) {
+      setError(res.error || 'Failed to delete attachment');
+      return;
+    }
+    await loadAttachments(evidenceId);
   };
 
   const handleDelete = async (id: string) => {
@@ -135,27 +198,18 @@ export default function EvidencePage() {
 
   return (
     <AppLayout>
-      {/* Header */}
-      <div className="bg-white shadow">
-        <div className="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center">
-            <div>
-              <h1 className="text-3xl font-bold text-gray-900">Evidence</h1>
-              <p className="mt-1 text-sm text-gray-600">
-                Track evidence coverage status and validity windows per control
-              </p>
-            </div>
-            <div className="flex gap-4">
-              <button
-                onClick={() => setShowCreateModal(true)}
-                className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700"
-              >
-                Add Evidence
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
+      <PageHeader
+        title="Evidence"
+        subtitle="Attach proof to controls and prepare audit-ready exports."
+        right={
+          <button
+            onClick={() => setShowCreateModal(true)}
+            className="inline-flex items-center rounded-md bg-blue-600 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-700"
+          >
+            Add evidence
+          </button>
+        }
+      />
 
       {/* Main content */}
       <div className="max-w-7xl mx-auto py-12 px-4 sm:px-6 lg:px-8">
@@ -251,6 +305,9 @@ export default function EvidencePage() {
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Valid To
                   </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Attachments
+                  </th>
                   <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Actions
                   </th>
@@ -260,6 +317,8 @@ export default function EvidencePage() {
                 {filteredEvidence.map((item) => {
                   const expired = isExpired(item.validTo);
                   const displayStatus = expired && item.status === 'APPROVED' ? 'EXPIRED' : item.status;
+                  const expanded = expandedEvidenceId === item.id;
+                  const attachments = attachmentsByEvidenceId[item.id] || [];
 
                   return (
                     <tr key={item.id} className="hover:bg-gray-50">
@@ -294,6 +353,15 @@ export default function EvidencePage() {
                         ) : (
                           '-'
                         )}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm">
+                        <button
+                          type="button"
+                          onClick={() => void toggleAttachments(item.id)}
+                          className="text-blue-600 hover:text-blue-800 font-medium"
+                        >
+                          {expanded ? 'Hide' : 'Manage'} ({attachments.length})
+                        </button>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                         <div className="flex items-center justify-end gap-2">
@@ -335,6 +403,65 @@ export default function EvidencePage() {
                 })}
               </tbody>
             </table>
+
+            {expandedEvidenceId && (
+              <div className="border-t border-gray-200 bg-gray-50 p-4">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div className="text-sm font-semibold text-gray-900">Attachments</div>
+                  <label className="inline-flex items-center gap-2 rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 cursor-pointer">
+                    <input
+                      type="file"
+                      className="hidden"
+                      onChange={(e) => {
+                        const f = e.target.files?.[0];
+                        if (!f || !expandedEvidenceId) return;
+                        void uploadAttachment(expandedEvidenceId, f);
+                        e.currentTarget.value = '';
+                      }}
+                      disabled={uploadingEvidenceId === expandedEvidenceId}
+                    />
+                    {uploadingEvidenceId === expandedEvidenceId ? 'Uploading…' : 'Upload file'}
+                  </label>
+                </div>
+
+                <div className="mt-3 space-y-2">
+                  {(attachmentsByEvidenceId[expandedEvidenceId] || []).length === 0 ? (
+                    <div className="text-sm text-gray-600">No attachments yet.</div>
+                  ) : (
+                    (attachmentsByEvidenceId[expandedEvidenceId] || []).map((a) => (
+                      <div
+                        key={a.id}
+                        className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-gray-200 bg-white px-3 py-2"
+                      >
+                        <div className="min-w-0">
+                          <div className="truncate text-sm font-medium text-gray-900">{a.filename}</div>
+                          <div className="text-xs text-gray-600">
+                            {(a.sizeBytes / 1024).toFixed(1)} KB · sha256 {a.sha256.slice(0, 8)}…
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <a
+                            className="text-sm font-medium text-blue-600 hover:text-blue-800"
+                            href={`/api/evidence/attachments/${a.id}/download`}
+                            target="_blank"
+                            rel="noreferrer"
+                          >
+                            Download
+                          </a>
+                          <button
+                            type="button"
+                            onClick={() => void deleteAttachment(expandedEvidenceId, a.id)}
+                            className="text-sm font-medium text-red-600 hover:text-red-800"
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            )}
           </div>
         )}
 
