@@ -65,6 +65,13 @@ export enum Permission {
   VENDOR_READ = 'VENDOR_READ',
   VENDOR_WRITE = 'VENDOR_WRITE',
   VENDOR_DELETE = 'VENDOR_DELETE',
+
+  // User admin / invitations
+  USER_READ = 'USER_READ',
+  USER_WRITE = 'USER_WRITE',
+  INVITE_CREATE = 'INVITE_CREATE',
+  INVITE_READ = 'INVITE_READ',
+  INVITE_REVOKE = 'INVITE_REVOKE',
 }
 
 /**
@@ -115,6 +122,12 @@ export const rolePermissions: Record<string, Permission[]> = {
     Permission.VENDOR_READ,
     Permission.VENDOR_WRITE,
     Permission.VENDOR_DELETE,
+
+    Permission.USER_READ,
+    Permission.USER_WRITE,
+    Permission.INVITE_CREATE,
+    Permission.INVITE_READ,
+    Permission.INVITE_REVOKE,
   ],
   ADMIN: [
     // Full operational access, but may need approval for some decisions
@@ -159,6 +172,12 @@ export const rolePermissions: Record<string, Permission[]> = {
     Permission.VENDOR_READ,
     Permission.VENDOR_WRITE,
     Permission.VENDOR_DELETE,
+
+    Permission.USER_READ,
+    Permission.USER_WRITE,
+    Permission.INVITE_CREATE,
+    Permission.INVITE_READ,
+    Permission.INVITE_REVOKE,
   ],
   OPERATOR: [
     // Can read and create, but limited write/delete

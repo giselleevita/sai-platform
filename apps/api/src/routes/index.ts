@@ -11,3 +11,5 @@ export { default as vendorRoutes } from './vendors';
 export { default as mlIntegrationRoutes } from './ml-integrations';
 export { default as gpaiRoutes } from './gpai';
 export { default as conformityRoutes } from './conformity';
+export { default as invitationsRoutes } from './invitations';
+export { default as usersRoutes } from './users';
