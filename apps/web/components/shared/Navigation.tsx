@@ -3,12 +3,25 @@
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { useEffect, useState } from 'react';
 import { ThemeToggle } from './ThemeToggle';
 import { clearAuth } from '@/lib/auth';
+import { api } from '@/lib/api';
+
+type CompanyOption = {
+  companyId: string;
+  companyName: string;
+  companyEmail: string;
+  role: string;
+};
 
 export function Navigation() {
   const pathname = usePathname();
   const router = useRouter();
+  const [companies, setCompanies] = useState<CompanyOption[]>([]);
+  const [activeCompanyId, setActiveCompanyId] = useState<string>('');
+  const [switching, setSwitching] = useState(false);
+  const [switchError, setSwitchError] = useState<string | null>(null);
 
   const isActive = (path: string) => {
     if (path === '/dashboard') {
@@ -39,6 +52,34 @@ export function Navigation() {
     }
   };
 
+  useEffect(() => {
+    const load = async () => {
+      const res = await api.get<CompanyOption[]>('/api/auth/companies');
+      if (res.success && Array.isArray(res.data)) {
+        setCompanies(res.data);
+      }
+      const me = await api.get<{ companyId?: string }>('/api/auth/me');
+      if (me.success && me.data?.companyId) setActiveCompanyId(me.data.companyId);
+    };
+    void load();
+  }, []);
+
+  const switchCompany = async (companyId: string) => {
+    const prev = activeCompanyId;
+    setSwitchError(null);
+    setSwitching(true);
+    setActiveCompanyId(companyId);
+    const res = await api.post('/api/auth/switch-company', { companyId });
+    if (!res.success) {
+      setActiveCompanyId(prev);
+      setSwitchError(res.error || 'Failed to switch company');
+      setSwitching(false);
+      return;
+    }
+    setSwitching(false);
+    router.refresh();
+  };
+
   const navigationItems = [
     { name: 'Dashboard', href: '/dashboard', icon: '📊' },
     { name: 'Inventory', href: '/inventory', icon: '📦' },
@@ -63,6 +104,7 @@ export function Navigation() {
     { name: 'Activity', href: '/activity', icon: '🔄' },
     { name: 'Compliance', href: '/compliance', icon: '✅' },
     { name: 'Reports', href: '/reports', icon: '📊' },
+    { name: 'Evidentia', href: '/integrations/evidentia', icon: '🧾' },
     { name: 'Webhooks', href: '/webhooks', icon: '🔗' },
   ];
 
@@ -101,6 +143,20 @@ export function Navigation() {
 
           {/* User Actions */}
           <div className="flex items-center space-x-4">
+            {companies.length > 1 && (
+              <select
+                value={activeCompanyId}
+                onChange={(e) => switchCompany(e.target.value)}
+                disabled={switching}
+                className="text-sm border border-gray-300 rounded-md px-2 py-1 bg-white disabled:opacity-60"
+              >
+                {companies.map((c) => (
+                  <option key={c.companyId} value={c.companyId}>
+                    {c.companyName}
+                  </option>
+                ))}
+              </select>
+            )}
             <ThemeToggle />
             <button
               onClick={handleLogout}
@@ -111,6 +167,14 @@ export function Navigation() {
           </div>
         </div>
       </div>
+
+      {switchError && (
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-2">
+          <div className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-md px-3 py-2">
+            {switchError}
+          </div>
+        </div>
+      )}
 
       {/* Mobile Navigation */}
       <div className="md:hidden border-t border-gray-200 dark:border-gray-700">
