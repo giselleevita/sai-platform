@@ -2,8 +2,10 @@ import { Response } from 'express';
 import { AuthenticatedRequest } from '../middleware/auth';
 import { prisma } from '../services/prisma.client';
 import { BadRequestError } from '../errors/AppError';
+import { logger } from '../utils/logger';
 import { PDFReportService, ReportOptions } from '../services/pdf-report.service';
 import { ReportExportService } from '../services/report-export.service';
+import { EntitlementsService } from '../services/entitlements.service';
 
 export class ReportController {
   /**
@@ -40,9 +42,12 @@ export class ReportController {
       }
 
       // JSON format (backward compatibility)
+      const max = 2000;
+      const limit = Math.max(1, Math.min(Number(req.query.limit || '500'), max));
       const tools = await prisma.aITool.findMany({
         where: { companyId },
         orderBy: { riskScore: 'desc' },
+        take: limit,
       });
 
       const risks = await prisma.risk.findMany({
@@ -59,6 +64,7 @@ export class ReportController {
           },
         },
         orderBy: { createdAt: 'desc' },
+        take: limit,
       });
 
       const report = {
@@ -97,7 +103,7 @@ export class ReportController {
 
       res.json({ success: true, data: report });
     } catch (error: any) {
-      console.error('Error generating risk assessment report:', error);
+      logger.error('Error generating risk assessment report', error);
       throw new BadRequestError(error?.message || 'Failed to generate risk assessment report');
     }
   }
@@ -133,8 +139,11 @@ export class ReportController {
       }
 
       // JSON format (backward compatibility)
+      const max = 2000;
+      const limit = Math.max(1, Math.min(Number(req.query.limit || '500'), max));
       const tools = await prisma.aITool.findMany({
         where: { companyId },
+        take: limit,
       });
 
       const policies = await prisma.policy.findMany({
@@ -146,6 +155,7 @@ export class ReportController {
             },
           },
         },
+        take: limit,
       });
 
       const regulations = await prisma.regulation.findMany({
@@ -161,6 +171,7 @@ export class ReportController {
             },
           },
         },
+        take: limit,
       });
 
       const report = {
@@ -212,7 +223,7 @@ export class ReportController {
 
       res.json({ success: true, data: report });
     } catch (error: any) {
-      console.error('Error generating compliance report:', error);
+      logger.error('Error generating compliance report', error);
       throw new BadRequestError(error?.message || 'Failed to generate compliance report');
     }
   }
@@ -249,7 +260,7 @@ export class ReportController {
 
       res.status(400).json({ success: false, error: 'Executive summary only available as PDF' });
     } catch (error: any) {
-      console.error('Error generating executive summary:', error);
+      logger.error('Error generating executive summary', error);
       throw new BadRequestError(error?.message || 'Failed to generate executive summary');
     }
   }
@@ -284,7 +295,7 @@ export class ReportController {
       );
       res.send(pdf);
     } catch (error: any) {
-      console.error('Error generating custom report:', error);
+      logger.error('Error generating custom report', error);
       throw new BadRequestError(error?.message || 'Failed to generate custom report');
     }
   }
@@ -384,5 +395,92 @@ export class ReportController {
 
     const data = await ReportExportService.exportCompliancePdf(companyId);
     res.json({ success: true, data });
+  }
+
+  /**
+   * GET /api/reports/audit-package
+   * JSON manifest for auditors (evidence, controls, snapshots, recent audit log).
+   */
+  static async generateAuditPackage(req: AuthenticatedRequest, res: Response) {
+    const companyId = req.user?.companyId;
+    if (!companyId) {
+      res.status(401).json({ success: false, error: 'Unauthorized' });
+      return;
+    }
+
+    const enabled = await EntitlementsService.getBool(companyId, 'report_exports_enabled');
+    if (enabled === false) {
+      throw new BadRequestError('Report exports are disabled for your plan');
+    }
+    const maxPerDay = await EntitlementsService.getInt(companyId, 'max_report_exports_per_day');
+    if (typeof maxPerDay === 'number') {
+      const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
+      const exports = await prisma.auditLog.count({
+        where: { companyId, action: 'REPORT_EXPORT', createdAt: { gte: since } },
+      });
+      if (exports >= maxPerDay) {
+        throw new BadRequestError(`Plan limit reached: max_report_exports_per_day=${maxPerDay}`);
+      }
+    }
+
+    const [snapshots, evidence, controls, policies, risks, auditTail] = await Promise.all([
+      prisma.complianceSnapshot.findMany({
+        where: { companyId },
+        orderBy: { createdAt: 'desc' },
+        take: 24,
+      }),
+      prisma.evidence.findMany({
+        where: { companyId },
+        include: { control: { select: { id: true, name: true } } },
+        orderBy: { updatedAt: 'desc' },
+        take: 500,
+      }),
+      prisma.control.findMany({
+        where: { companyId },
+        orderBy: { updatedAt: 'desc' },
+        take: 500,
+      }),
+      prisma.policy.findMany({
+        where: { companyId },
+        orderBy: { updatedAt: 'desc' },
+        take: 200,
+      }),
+      prisma.risk.findMany({
+        where: { companyId },
+        orderBy: { updatedAt: 'desc' },
+        take: 200,
+      }),
+      prisma.auditLog.findMany({
+        where: { companyId },
+        orderBy: { createdAt: 'desc' },
+        take: 200,
+      }),
+    ]);
+
+    res.json({
+      success: true,
+      data: {
+        type: 'audit-package',
+        generatedAt: new Date().toISOString(),
+        companyId,
+        snapshots,
+        evidence,
+        controls,
+        policies,
+        risks,
+        recentAuditLog: auditTail,
+      },
+    });
+
+    await prisma.auditLog.create({
+      data: {
+        companyId,
+        actorId: req.user?.id || null,
+        action: 'REPORT_EXPORT',
+        targetType: 'Report',
+        targetId: null,
+        changes: { type: 'audit-package' } as any,
+      },
+    });
   }
 }

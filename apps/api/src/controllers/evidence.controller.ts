@@ -9,7 +9,8 @@ export class EvidenceController {
       res.status(401).json({ success: false, error: 'Unauthorized' });
       return;
     }
-    const evidence = await EvidenceService.list(companyId);
+    const limit = typeof req.query.limit === 'string' ? Number(req.query.limit) : undefined;
+    const evidence = await EvidenceService.list(companyId, { limit: Number.isFinite(limit) ? limit : undefined });
     res.json({ success: true, data: evidence });
   }
 
