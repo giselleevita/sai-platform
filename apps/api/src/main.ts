@@ -3,31 +3,31 @@ import cors from 'cors';
 import cookieParser from 'cookie-parser';
 import helmet from 'helmet';
 import { config } from './config';
-import authRoutes from './routes/auth';
-import inventoryRoutes from './routes/inventory';
-import governanceRoutes from './routes/governance';
-import riskRoutes from './routes/risks';
-import evidenceRoutes from './routes/evidence';
+import { authRouter } from './modules/auth';
+import { inventoryRouter } from './modules/inventory';
+import { governanceRouter } from './modules/governance';
+import { risksRouter } from './modules/risks';
+import { evidenceRouter } from './modules/evidence';
+import { reportsRouter } from './modules/reports';
+import { integrationsRouter } from './modules/integrations';
+import { scimRouter } from './modules/scim';
+import { entitlementsRouter } from './modules/entitlements';
+import { webhooksRouter } from './modules/webhooks';
 import incidentRoutes from './routes/incidents';
 import auditRoutes from './routes/audit';
 import auditLogRoutes from './routes/audit-log';
 import exceptionRoutes from './routes/exceptions';
 import vendorRoutes from './routes/vendors';
 import pricingRoutes from './routes/pricing';
-import reportRoutes from './routes/reports';
 import bulkRoutes from './routes/bulk';
 import activityRoutes from './routes/activity';
 import commentsRoutes from './routes/comments';
 import importExportRoutes from './routes/import-export';
-import webhooksRoutes from './routes/webhooks';
 import mlIntegrationRoutes from './routes/ml-integrations';
 import gpaiRoutes from './routes/gpai';
 import conformityRoutes from './routes/conformity';
 import invitationsRoutes from './routes/invitations';
 import usersRoutes from './routes/users';
-import integrationsRoutes from './routes/integrations';
-import scimRoutes from './routes/scim';
-import entitlementsRoutes from './routes/entitlements';
 import { errorHandler } from './middleware';
 import { apiRateLimiter } from './middleware/rateLimit';
 import { securityAuditMiddleware } from './middleware/securityAudit';
@@ -87,7 +87,7 @@ app.get('/api/health/metrics', (_req, res) => {
 app.use('/api', apiRateLimiter);
 
 // SCIM endpoints are typically called server-to-server.
-app.use('/scim/v2', scimRoutes);
+app.use('/scim/v2', scimRouter);
 
 // Root endpoint - API info
 app.get('/', (req, res) => {
@@ -133,61 +133,47 @@ app.get('/api-docs', (req, res) => {
 const apiV1Routes = express.Router();
 
 // API routes (v1)
-apiV1Routes.use('/auth', authRoutes);
+apiV1Routes.use('/auth', authRouter);
 // Apply CSRF protection to all authenticated routes (except auth)
 // Note: CSRF middleware is applied per-route, not globally, to allow auth endpoints
-apiV1Routes.use('/inventory', csrfProtection, inventoryRoutes);
-apiV1Routes.use('/governance', csrfProtection, governanceRoutes);
-apiV1Routes.use('/risks', csrfProtection, riskRoutes);
-apiV1Routes.use('/evidence', csrfProtection, evidenceRoutes);
+apiV1Routes.use('/inventory', csrfProtection, inventoryRouter);
+apiV1Routes.use('/governance', csrfProtection, governanceRouter);
+apiV1Routes.use('/risks', csrfProtection, risksRouter);
+apiV1Routes.use('/evidence', csrfProtection, evidenceRouter);
 apiV1Routes.use('/incidents', csrfProtection, incidentRoutes);
 apiV1Routes.use('/audit', csrfProtection, auditRoutes);
 apiV1Routes.use('/audit-log', csrfProtection, auditLogRoutes);
 apiV1Routes.use('/exceptions', csrfProtection, exceptionRoutes);
 apiV1Routes.use('/vendors', csrfProtection, vendorRoutes);
 apiV1Routes.use('/pricing', csrfProtection, pricingRoutes);
-apiV1Routes.use('/reports', csrfProtection, reportRoutes);
+apiV1Routes.use('/reports', csrfProtection, reportsRouter);
 apiV1Routes.use('/bulk', csrfProtection, bulkRoutes);
 apiV1Routes.use('/activity', csrfProtection, activityRoutes);
 apiV1Routes.use('/comments', csrfProtection, commentsRoutes);
 apiV1Routes.use('/import-export', csrfProtection, importExportRoutes);
-apiV1Routes.use('/webhooks', csrfProtection, webhooksRoutes);
+apiV1Routes.use('/webhooks', csrfProtection, webhooksRouter);
 apiV1Routes.use('/ml-integrations', csrfProtection, mlIntegrationRoutes);
 apiV1Routes.use('/gpai', csrfProtection, gpaiRoutes);
 apiV1Routes.use('/conformity', csrfProtection, conformityRoutes);
 apiV1Routes.use('/invitations', csrfProtection, invitationsRoutes);
 apiV1Routes.use('/users', csrfProtection, usersRoutes);
-apiV1Routes.use('/integrations', csrfProtection, integrationsRoutes);
-apiV1Routes.use('/entitlements', csrfProtection, entitlementsRoutes);
+apiV1Routes.use('/integrations', csrfProtection, integrationsRouter);
+apiV1Routes.use('/entitlements', csrfProtection, entitlementsRouter);
 
 // Mount v1 routes
 app.use('/api/v1', apiV1Routes);
 
-// Legacy routes (backward compatibility - redirect to v1)
-app.use('/api/auth', authRoutes);
-app.use('/api/inventory', csrfProtection, inventoryRoutes);
-app.use('/api/governance', csrfProtection, governanceRoutes);
-app.use('/api/risks', csrfProtection, riskRoutes);
-app.use('/api/evidence', csrfProtection, evidenceRoutes);
-app.use('/api/incidents', csrfProtection, incidentRoutes);
-app.use('/api/audit', csrfProtection, auditRoutes);
-app.use('/api/audit-log', csrfProtection, auditLogRoutes);
-app.use('/api/exceptions', csrfProtection, exceptionRoutes);
-app.use('/api/vendors', csrfProtection, vendorRoutes);
-app.use('/api/pricing', csrfProtection, pricingRoutes);
-app.use('/api/reports', csrfProtection, reportRoutes);
-app.use('/api/bulk', csrfProtection, bulkRoutes);
-app.use('/api/activity', csrfProtection, activityRoutes);
-app.use('/api/comments', csrfProtection, commentsRoutes);
-app.use('/api/import-export', csrfProtection, importExportRoutes);
-app.use('/api/webhooks', csrfProtection, webhooksRoutes);
-app.use('/api/ml-integrations', csrfProtection, mlIntegrationRoutes);
-app.use('/api/gpai', csrfProtection, gpaiRoutes);
-app.use('/api/conformity', csrfProtection, conformityRoutes);
-app.use('/api/invitations', csrfProtection, invitationsRoutes);
-app.use('/api/users', csrfProtection, usersRoutes);
-app.use('/api/integrations', csrfProtection, integrationsRoutes);
-app.use('/api/entitlements', csrfProtection, entitlementsRoutes);
+// Legacy routes (backward compatibility): redirect /api/* to /api/v1/*
+app.use('/api', (req, res, next) => {
+  // allow health/probes/docs and rate-limiter mount itself
+  if (req.path.startsWith('/health') || req.path === '/api-docs') return next();
+  // do not redirect SCIM
+  if (req.path.startsWith('/scim')) return next();
+  // already versioned
+  if (req.path.startsWith('/v1')) return next();
+  const qs = req.originalUrl.includes('?') ? req.originalUrl.slice(req.originalUrl.indexOf('?')) : '';
+  res.redirect(307, `/api/v1${req.path}${qs}`);
+});
 
 // Error handling middleware (must be last)
 app.use(errorHandler);
