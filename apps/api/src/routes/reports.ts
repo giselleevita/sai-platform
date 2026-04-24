@@ -57,6 +57,16 @@ router.get(
 );
 
 /**
+ * GET /api/reports/auditor-zip
+ * Unified ZIP export (audit package + manifest + optional attachments).
+ */
+router.get(
+  '/auditor-zip',
+  requirePermission(Permission.REPORT_EXPORT),
+  asyncHandler(ReportController.downloadAuditorZip)
+);
+
+/**
  * POST /api/reports/custom
  * Generate custom report
  * Requires: REPORT_READ

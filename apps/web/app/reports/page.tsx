@@ -249,6 +249,32 @@ export default function ReportsPage() {
     }
   };
 
+  const handleDownloadAuditorZip = async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const response = await fetch('/api/reports/auditor-zip', { credentials: 'include' });
+      if (!response.ok) {
+        const data = await response.json().catch(() => null);
+        setError(data?.error || `Failed to download ZIP (${response.status})`);
+        return;
+      }
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `sai-auditor-export-${new Date().toISOString().split('T')[0]}.zip`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    } catch (err: any) {
+      setError(err?.message || 'Failed to download ZIP');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <AppLayout>
       {/* Header */}
@@ -348,6 +374,21 @@ export default function ReportsPage() {
                 className="w-full px-4 py-2 bg-slate-700 text-white rounded-md hover:bg-slate-800 text-sm font-medium disabled:opacity-50"
               >
                 {loading ? 'Preparing...' : 'Download JSON'}
+              </button>
+            </div>
+
+            {/* Auditor ZIP */}
+            <div className="border border-gray-200 rounded-lg p-6 hover:shadow-md transition-shadow">
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">Auditor ZIP</h3>
+              <p className="text-gray-600 text-sm mb-4">
+                Unified export containing the audit package, governance manifest, and optional attachments.
+              </p>
+              <button
+                onClick={handleDownloadAuditorZip}
+                disabled={loading}
+                className="w-full px-4 py-2 bg-blue-700 text-white rounded-md hover:bg-blue-800 text-sm font-medium disabled:opacity-50"
+              >
+                {loading ? 'Preparing...' : 'Download ZIP'}
               </button>
             </div>
 

@@ -15,4 +15,4 @@ coverage/
 .turbo/
 
 # Local/generated review outputs
-reports/
+/reports/
