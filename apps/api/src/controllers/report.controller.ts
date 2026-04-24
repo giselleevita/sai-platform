@@ -6,6 +6,8 @@ import { logger } from '../utils/logger';
 import { PDFReportService, ReportOptions } from '../services/pdf-report.service';
 import { ReportExportService } from '../services/report-export.service';
 import { EntitlementsService } from '../services/entitlements.service';
+import archiver from 'archiver';
+import { getAttachmentStorage } from '../services/attachments';
 
 export class ReportController {
   /**
@@ -511,5 +513,204 @@ export class ReportController {
         recentAuditLog: auditTail,
       },
     });
+  }
+
+  /**
+   * GET /api/reports/auditor-zip
+   * Unified export: audit-package + governance manifest + (optionally) attachments.
+   */
+  static async downloadAuditorZip(req: AuthenticatedRequest, res: Response) {
+    const companyId = req.user?.companyId;
+    if (!companyId) {
+      res.status(401).json({ success: false, error: 'Unauthorized' });
+      return;
+    }
+
+    const enabled = await EntitlementsService.getBool(companyId, 'report_exports_enabled');
+    if (enabled === false) {
+      throw new BadRequestError('Report exports are disabled for your plan');
+    }
+    const maxPerDay = await EntitlementsService.getInt(companyId, 'max_report_exports_per_day');
+    if (typeof maxPerDay === 'number') {
+      const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
+      const exports = await prisma.auditLog.count({
+        where: { companyId, action: 'REPORT_EXPORT', createdAt: { gte: since } },
+      });
+      if (exports >= maxPerDay) {
+        throw new BadRequestError(`Plan limit reached: max_report_exports_per_day=${maxPerDay}`);
+      }
+    }
+
+    const includeAttachments = (req.query.includeAttachments as string | undefined) !== 'false';
+    const maxAttachments = Math.max(0, Math.min(Number(req.query.maxAttachments || '200'), 500));
+    const maxTotalBytes = Math.max(1, Math.min(Number(req.query.maxTotalBytes || String(200 * 1024 * 1024)), 1024 * 1024 * 1024));
+
+    await prisma.auditLog.create({
+      data: {
+        companyId,
+        actorId: req.user?.id || null,
+        action: 'REPORT_EXPORT',
+        targetType: 'Report',
+        targetId: null,
+        changes: {
+          type: 'auditor-zip',
+          includeAttachments,
+          maxAttachments,
+          maxTotalBytes,
+        } as any,
+      },
+    });
+
+    const generatedAt = new Date().toISOString();
+
+    const [auditPkg, snapshots, evidence, attachments] = await Promise.all([
+      (async () => {
+        const [snapshots, evidence, controls, policies, risks, auditTail] = await Promise.all([
+          prisma.complianceSnapshot.findMany({
+            where: { companyId },
+            orderBy: { createdAt: 'desc' },
+            take: 24,
+          }),
+          prisma.evidence.findMany({
+            where: { companyId },
+            include: { control: { select: { id: true, name: true } } },
+            orderBy: { updatedAt: 'desc' },
+            take: 500,
+          }),
+          prisma.control.findMany({
+            where: { companyId },
+            orderBy: { updatedAt: 'desc' },
+            take: 500,
+          }),
+          prisma.policy.findMany({
+            where: { companyId },
+            orderBy: { updatedAt: 'desc' },
+            take: 200,
+          }),
+          prisma.risk.findMany({
+            where: { companyId },
+            orderBy: { updatedAt: 'desc' },
+            take: 200,
+          }),
+          prisma.auditLog.findMany({
+            where: { companyId },
+            orderBy: { createdAt: 'desc' },
+            take: 200,
+          }),
+        ]);
+        return {
+          type: 'audit-package',
+          generatedAt,
+          companyId,
+          snapshots,
+          evidence,
+          controls,
+          policies,
+          risks,
+          recentAuditLog: auditTail,
+        };
+      })(),
+      prisma.complianceSnapshot.findMany({
+        where: { companyId },
+        orderBy: { createdAt: 'desc' },
+        select: { id: true, createdAt: true, summary: true },
+        take: 100,
+      }),
+      prisma.evidence.findMany({
+        where: { companyId },
+        select: { id: true, controlId: true, status: true, contentHash: true, updatedAt: true },
+        orderBy: { updatedAt: 'desc' },
+        take: 1000,
+      }),
+      prisma.evidenceAttachment.findMany({
+        where: { companyId },
+        select: { id: true, evidenceId: true, filename: true, contentType: true, sha256: true, sizeBytes: true, createdAt: true, storagePath: true },
+        orderBy: { createdAt: 'desc' },
+        take: Math.max(0, maxAttachments),
+      }),
+    ]);
+
+    // Build a manifest payload consistent with GovernanceExportController
+    const sha256Json = (obj: unknown): string =>
+      require('crypto').createHash('sha256').update(JSON.stringify(obj ?? null)).digest('hex');
+
+    const byEvidence = new Map<string, any[]>();
+    for (const a of attachments) {
+      const arr = byEvidence.get(a.evidenceId) ?? [];
+      arr.push(a);
+      byEvidence.set(a.evidenceId, arr);
+    }
+
+    const governanceManifest = {
+      generatedAt,
+      companyId,
+      snapshots: snapshots.map((s) => ({ id: s.id, createdAt: s.createdAt, sha256: sha256Json(s.summary) })),
+      evidence: evidence.map((e) => ({
+        id: e.id,
+        controlId: e.controlId,
+        status: e.status,
+        contentHash: e.contentHash,
+        updatedAt: e.updatedAt,
+        attachments: (byEvidence.get(e.id) ?? []).map((a) => ({
+          id: a.id,
+          filename: a.filename,
+          sha256: a.sha256,
+          sizeBytes: a.sizeBytes,
+          createdAt: a.createdAt,
+        })),
+      })),
+    };
+
+    res.setHeader('Content-Type', 'application/zip');
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="sai-auditor-export-${generatedAt.slice(0, 10)}.zip"`
+    );
+
+    const zip = archiver('zip', { zlib: { level: 9 } });
+    zip.on('warning', (err) => logger.warn('ZIP warning', err));
+    zip.on('error', (err) => {
+      logger.error('ZIP error', err);
+      res.status(500).end();
+    });
+    zip.pipe(res);
+
+    zip.append(JSON.stringify(auditPkg, null, 2), { name: 'audit-package.json' });
+    zip.append(JSON.stringify(governanceManifest, null, 2), { name: 'governance-manifest.json' });
+
+    const attachmentsIndexLines = ['attachmentId,evidenceId,filename,sha256,sizeBytes,createdAt,zipPath'];
+    let totalBytes = 0;
+
+    if (includeAttachments) {
+      const { storage } = getAttachmentStorage();
+      for (const a of attachments) {
+        totalBytes += a.sizeBytes || 0;
+        if (totalBytes > maxTotalBytes) break;
+        const safeName = String(a.filename || 'attachment').replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 120);
+        const zipPath = `attachments/${a.evidenceId}/${a.id}-${safeName}`;
+        try {
+          const stream = await storage.getObjectStream({ key: a.storagePath });
+          zip.append(stream as any, { name: zipPath });
+          attachmentsIndexLines.push(
+            [
+              a.id,
+              a.evidenceId,
+              JSON.stringify(a.filename || ''),
+              a.sha256,
+              String(a.sizeBytes || 0),
+              new Date(a.createdAt).toISOString(),
+              zipPath,
+            ].join(',')
+          );
+        } catch (e) {
+          attachmentsIndexLines.push(
+            [a.id, a.evidenceId, JSON.stringify(a.filename || ''), a.sha256, String(a.sizeBytes || 0), new Date(a.createdAt).toISOString(), 'ERROR'].join(',')
+          );
+        }
+      }
+    }
+
+    zip.append(attachmentsIndexLines.join('\n') + '\n', { name: 'attachments.csv' });
+    await zip.finalize();
   }
 }

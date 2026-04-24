@@ -97,6 +97,34 @@ export default function CompliancePage() {
             >
               Export audit package
             </button>
+            <button
+              type="button"
+              onClick={async () => {
+                try {
+                  const response = await fetch('/api/reports/auditor-zip', {
+                    method: 'GET',
+                    credentials: 'include',
+                  });
+                  if (!response.ok) {
+                    const data = await response.json().catch(() => null);
+                    setError(data?.error || `Failed to download ZIP (${response.status})`);
+                    return;
+                  }
+                  const blob = await response.blob();
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement('a');
+                  a.href = url;
+                  a.download = `sai-auditor-export-${new Date().toISOString().slice(0, 10)}.zip`;
+                  a.click();
+                  URL.revokeObjectURL(url);
+                } catch (e: any) {
+                  setError(e?.message || 'Failed to download ZIP');
+                }
+              }}
+              className="rounded-md border border-gray-300 dark:border-gray-800 bg-white dark:bg-gray-900 px-3 py-2 text-sm font-semibold text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800"
+            >
+              Download auditor ZIP
+            </button>
           </>
         }
       />
