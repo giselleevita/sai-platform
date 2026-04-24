@@ -180,11 +180,17 @@ app.use(errorHandler);
 
 app.listen(config.port, () => {
   logger.info(`✅ API server running on http://localhost:${config.port}`);
-  if (process.env.RUN_SCHEDULED_REPORTS !== 'false') {
+  const shouldRunScheduledReports =
+    process.env.RUN_SCHEDULED_REPORTS === 'true' ||
+    (config.nodeEnv === 'production' && process.env.RUN_SCHEDULED_REPORTS !== 'false');
+
+  if (shouldRunScheduledReports) {
     ScheduledReportsService.initializeAllReports().catch((error) => {
       logger.error('Failed to initialize scheduled reports:', error);
     });
   } else {
-    logger.info('Scheduled reports disabled for this process (RUN_SCHEDULED_REPORTS=false)');
+    logger.info(
+      'Scheduled reports disabled for this process (set RUN_SCHEDULED_REPORTS=true to enable)'
+    );
   }
 });
