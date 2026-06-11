@@ -22,7 +22,6 @@ WORKDIR /app/apps/web
 COPY --from=build /app/apps/web/.next ./.next
 COPY --from=build /app/apps/web/next.config.ts ./next.config.ts
 COPY --from=build /app/apps/web/package*.json ./
-COPY --from=build /app/apps/web/public ./public 2>/dev/null || true
 COPY --from=deps /app/node_modules ./node_modules
 
 EXPOSE 3000
