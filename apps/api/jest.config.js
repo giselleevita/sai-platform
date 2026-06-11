@@ -14,5 +14,7 @@ module.exports = {
   ],
   moduleNameMapper: {
     '^@/(.*)$': '<rootDir>/src/$1',
+    '^@sai/risk-scoring$': '<rootDir>/../../packages/risk-scoring/src/index.ts',
+    '^@sai/shared-types$': '<rootDir>/../../packages/shared-types/src/index.ts',
   },
 };

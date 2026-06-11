@@ -2,7 +2,7 @@
 
 **Govern every AI decision — with accountability, risk control, and audit-ready proof.**
 
-SAI Platform is a **production-ready, enterprise-grade** secure AI integration management system that helps organizations assess AI risk, enforce policies, and prove compliance with regulations like the EU AI Act and NIS2.
+SAI Platform is a full-stack reference implementation for assessing AI risk, enforcing governance workflows, and producing audit-oriented evidence for regulations such as the EU AI Act and NIS2.
 
 ## 🎯 What It Does
 
@@ -163,10 +163,10 @@ npm run db:push      # Push schema changes (dev only)
 
 ## 📊 Platform Status
 
-### ✅ Production Ready
+### Implemented Scope
 
 - **Features**: 29/29 (100%) - All core and advanced features implemented
-- **Security**: Enterprise-grade with httpOnly cookies, CSRF, rate limiting
+- **Security controls**: httpOnly cookies, CSRF protection, and rate limiting
 - **Performance**: Optimized with pagination, search, and caching
 - **Documentation**: Complete API docs and user guides
 - **Testing**: Jest framework configured with example tests
@@ -190,7 +190,7 @@ npm run db:push      # Push schema changes (dev only)
 
 ## 🚀 Deployment
 
-The platform is ready for production deployment to:
+The repository includes deployment patterns for:
 
 - **AWS ECS Fargate** - Containerized API deployment
 - **Neon Database** - Managed PostgreSQL with SSL
@@ -205,4 +205,4 @@ Private - All rights reserved
 
 ---
 
-**Status**: ✅ **PRODUCTION READY** | **Version**: 1.0.0 | **Last Updated**: January 2026
+**Status**: Reference implementation | **Version**: 1.0.0 | **Last Updated**: January 2026

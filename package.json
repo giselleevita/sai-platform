@@ -18,7 +18,7 @@
     "check:node": "node scripts/check-node-version.cjs",
     "predev": "npm run check:node",
     "prebuild": "npm run check:node",
-    "pretest": "npm run check:node",
+    "pretest": "npm run check:node && turbo run build --filter=@sai/risk-scoring --filter=@sai/shared-types",
     "setup": "bash scripts/setup.sh",
     "test:mvp": "bash tests/api/test-mvp-happy-path.sh",
     "test:csrf": "bash tests/api/test-csrf-auth.sh",
