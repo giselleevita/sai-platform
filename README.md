@@ -1,12 +1,16 @@
-# SAI Platform - Enterprise AI Governance Platform
+# SAI Platform
 
-**Govern every AI decision — with accountability, risk control, and audit-ready proof.**
+[![Quality Gate](https://github.com/giselleevita/sai-platform/actions/workflows/ci.yml/badge.svg)](https://github.com/giselleevita/sai-platform/actions/workflows/ci.yml)
+[![Security Checks](https://github.com/giselleevita/sai-platform/actions/workflows/security.yml/badge.svg)](https://github.com/giselleevita/sai-platform/actions/workflows/security.yml)
 
 SAI Platform is a full-stack reference implementation for assessing AI risk, enforcing governance workflows, and producing audit-oriented evidence for regulations such as the EU AI Act and NIS2.
 
-## 🎯 What It Does
+It demonstrates a Next.js and Express/Prisma architecture with company-scoped data,
+governance workflows, security controls, and a reproducible clean-database deployment path.
+It is not a certified compliance product and requires independent review before production
+use.
 
-SAI Platform provides comprehensive AI governance, risk management, and compliance tracking:
+## What It Does
 
 - **AI Tool Inventory** - Centralized registry of all AI tools with risk scoring
 - **Risk Management** - Automated risk assessment with likelihood/impact analysis
@@ -16,41 +20,33 @@ SAI Platform provides comprehensive AI governance, risk management, and complian
 - **Report Generation** - PDF reports, Excel exports, and custom report builder
 - **Governance Workflows** - Policy management, control tracking, and decision traceability
 
-## ✨ Key Features
+## Key Features
 
 ### Core Capabilities
-- ✅ **AI Tool Inventory** - Register, categorize, and track all AI tools
-- ✅ **Automated Risk Scoring** - AI-powered risk assessment with explainable factors
-- ✅ **Risk Decision Management** - Accept, defer, or reject risks with management sign-off
-- ✅ **Policy & Control Management** - Central registry of policies, controls, and procedures
-- ✅ **Evidence Governance** - Track evidence coverage, expiry, and approval status
-- ✅ **Incident Management** - Full incident lifecycle with severity classification
-- ✅ **Compliance Dashboards** - Real-time compliance status and gap analysis
-- ✅ **Audit Logging** - Complete audit trail with search and export capabilities
+- **AI Tool Inventory** - Register, categorize, and track AI tools
+- **Explainable Risk Scoring** - Calculate risk from documented factors
+- **Risk Decision Management** - Accept, defer, or reject risks with sign-off records
+- **Policy & Control Management** - Manage policies, controls, and procedures
+- **Evidence Governance** - Track evidence coverage, expiry, and approval status
+- **Incident Management** - Manage incident lifecycle and severity
+- **Compliance Dashboards** - Review compliance status and gaps
+- **Audit Logging** - Search and export activity records
 
 ### Advanced Features
-- ✅ **Activity Feed** - Real-time activity tracking across the platform
-- ✅ **Comments & Discussions** - Threaded comments on tools, risks, and incidents
-- ✅ **Excel Import/Export** - Bulk import tools and risks, export data for analysis
-- ✅ **Webhooks** - Event-based integrations with external systems
-- ✅ **Custom Fields** - Extensible data model for organization-specific metadata
-- ✅ **API Documentation** - Complete OpenAPI 3.0 documentation
+- **Activity Feed** - Activity tracking across the platform
+- **Comments & Discussions** - Threaded comments on tools, risks, and incidents
+- **Excel Import/Export** - Bulk import tools and risks and export data
+- **Webhooks** - Event-based integrations with external systems
+- **Custom Fields** - Extensible organization-specific metadata
+- **API Documentation** - OpenAPI documentation
 
-### Enterprise Security
-- ✅ **httpOnly Cookies** - Secure token storage with CSRF protection
-- ✅ **Rate Limiting** - Multi-tier rate limiting (API, auth, reports)
-- ✅ **Input Validation** - Comprehensive Zod schema validation
-- ✅ **RBAC** - Role-based access control with permission enforcement
-- ✅ **Soft Deletes** - Recoverable deletions with audit trail
-- ✅ **Structured Logging** - Request IDs and comprehensive logging
+### Security Controls
+- **httpOnly Cookies and CSRF Protection**
+- **Rate Limiting and Zod Input Validation**
+- **Role-Based Access Control**
+- **Soft Deletes and Structured Audit Logging**
 
-### Performance & Scalability
-- ✅ **Pagination** - Efficient pagination on all list endpoints
-- ✅ **Full-Text Search** - Server-side search and filtering
-- ✅ **Redis Caching** - Caching strategy ready for production
-- ✅ **Database Indexing** - Optimized queries with proper indexes
-
-## 🏗️ Architecture
+## Architecture
 
 ```
 sai-platform/
@@ -74,7 +70,7 @@ sai-platform/
 - **Validation**: Zod schemas
 - **Testing**: Jest
 
-## 🚀 Quick Start
+## Quick Start
 
 ### Prerequisites
 
@@ -105,11 +101,11 @@ Access:
 - **API**: http://localhost:3001
 - **API Docs**: http://localhost:3001/api-docs
 
-## 📚 Documentation
+## Documentation
 
 ### Essential Guides
 
-- **[Getting Started](docs/GETTING_STARTED.md)** - Complete setup guide (⭐ Start here)
+- **[Getting Started](docs/GETTING_STARTED.md)** - Complete setup guide
 - **[How It Works](docs/HOW_IT_WORKS.md)** - Platform overview and architecture
 - **[Quick Start](docs/QUICK_START.md)** - Quick reference commands
 - **[Troubleshooting](docs/TROUBLESHOOTING.md)** - Common issues and solutions
@@ -124,7 +120,7 @@ Access:
 
 All documentation is in the `docs/` directory.
 
-## 🛠️ Development
+## Development
 
 ### CI (GitHub Actions)
 
@@ -161,34 +157,25 @@ npm run db:push      # Push schema changes (dev only)
 - **Frontend**: `apps/web/app/` - Next.js pages and components
 - **Shared**: `packages/` - Shared TypeScript types and utilities
 
-## 📊 Platform Status
+## Platform Status
 
 ### Implemented Scope
 
-- **Features**: 29/29 (100%) - All core and advanced features implemented
-- **Security controls**: httpOnly cookies, CSRF protection, and rate limiting
-- **Performance**: Optimized with pagination, search, and caching
-- **Documentation**: Complete API docs and user guides
-- **Testing**: Jest framework configured with example tests
+- Core inventory, risk, control, evidence, incident, and reporting workflows are implemented.
+- CI validates workspace builds, tests, CSRF behavior, clean PostgreSQL migrations, and both Docker images.
+- Test coverage remains incomplete across the full API and UI surface.
+- See [MVP Release Notes](docs/RELEASE_NOTES_MVP.md) for delivered scope and known limits.
 
-### Key Metrics
-
-- **Backend Services**: 20+
-- **API Endpoints**: 80+
-- **Frontend Pages**: 24+
-- **Database Models**: 26
-- **Total Files**: 100+ TypeScript files
-
-## 🔐 Security Features
+## Security Features
 
 - **Authentication**: JWT tokens in httpOnly cookies with CSRF protection
 - **Authorization**: Role-based access control (RBAC) with permission enforcement
-- **Input Validation**: Comprehensive Zod schema validation on all endpoints
+- **Input Validation**: Zod schema validation on covered endpoints
 - **Rate Limiting**: Multi-tier rate limiting to prevent abuse
-- **Audit Logging**: Complete audit trail for compliance
-- **Data Isolation**: Company-level data isolation enforced
+- **Audit Logging**: Activity records for governance workflows
+- **Data Isolation**: Company-scoped data access patterns
 
-## 🚀 Deployment
+## Deployment
 
 The repository includes deployment patterns for:
 
@@ -199,10 +186,10 @@ The repository includes deployment patterns for:
 
 See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for detailed deployment instructions.
 
-## 📝 License
+## License
 
 Private - All rights reserved
 
 ---
 
-**Status**: Reference implementation | **Version**: 1.0.0 | **Last Updated**: January 2026
+**Status**: Reference implementation | **Version**: 1.0.0
