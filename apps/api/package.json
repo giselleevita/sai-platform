@@ -49,7 +49,7 @@
     "jsonwebtoken": "^9.0.3",
     "multer": "^2.0.2",
     "node-cron": "^4.2.1",
-    "nodemailer": "^8.0.3",
+    "nodemailer": "^9.0.1",
     "openid-client": "^6.8.2",
     "otplib": "^13.1.0",
     "pdfkit": "^0.17.2",
