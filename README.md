@@ -1,5 +1,7 @@
 # SAI Platform
 
+> **Portfolio note:** Supporting repository. Featured evidence API in the public stack is [proofrail-evidence-api](https://github.com/giselleevita/proofrail-evidence-api). Flagship enforcement repo: [agent-security-gate](https://github.com/giselleevita/agent-security-gate).
+
 [![Quality Gate](https://github.com/giselleevita/sai-platform/actions/workflows/ci.yml/badge.svg)](https://github.com/giselleevita/sai-platform/actions/workflows/ci.yml)
 [![Security Checks](https://github.com/giselleevita/sai-platform/actions/workflows/security.yml/badge.svg)](https://github.com/giselleevita/sai-platform/actions/workflows/security.yml)
 
