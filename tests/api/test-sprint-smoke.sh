@@ -35,17 +35,26 @@ echo "$DOCS_JSON" | jq -e '.openapi == "3.0.0"' >/dev/null || fail "GET /api-doc
 echo "$DOCS_JSON" | jq -e '.paths["/api/inventory/{id}/governance"] != null' >/dev/null || fail "GET /api-docs missing inventory governance path"
 echo "✅ GET /api-docs (OpenAPI 3.0 + inventory governance paths)"
 
-# Login with wrong password → expect 401
-LOGIN_CODE="$(curl -sS -o /tmp/sai-sprint-login.json -w '%{http_code}' -X POST "$API_URL/api/auth/login" \
+# The legacy endpoint must preserve the request through a temporary redirect.
+LEGACY_HEADERS="$(curl -sS -D - -o /dev/null -X POST "$API_URL/api/auth/login" \
+  -H "Content-Type: application/json" \
+  -d '{"email":"nobody@example.com","password":"wrong-pass"}')"
+echo "$LEGACY_HEADERS" | grep -Eq '^HTTP/[^ ]+ 307' || fail "POST /api/auth/login expected HTTP 307"
+echo "$LEGACY_HEADERS" | tr -d '\r' | grep -Eqi '^location: /api/v1/auth/login$' \
+  || fail "POST /api/auth/login did not redirect to /api/v1/auth/login"
+echo "✅ POST /api/auth/login redirects to canonical API route (307)"
+
+# The canonical endpoint must still reject bad credentials.
+LOGIN_CODE="$(curl -sS -o /tmp/sai-sprint-login.json -w '%{http_code}' -X POST "$API_URL/api/v1/auth/login" \
   -H "Content-Type: application/json" \
   -d '{"email":"nobody@example.com","password":"wrong-pass"}')"
 
 if [ "$LOGIN_CODE" != "401" ]; then
   echo "Response body:"
   cat /tmp/sai-sprint-login.json 2>/dev/null || true
-  fail "POST /api/auth/login expected HTTP 401 for bad credentials, got $LOGIN_CODE"
+  fail "POST /api/v1/auth/login expected HTTP 401 for bad credentials, got $LOGIN_CODE"
 fi
-echo "✅ POST /api/auth/login rejects bad credentials (401)"
+echo "✅ POST /api/v1/auth/login rejects bad credentials (401)"
 
 rm -f /tmp/sai-sprint-login.json
 echo ""

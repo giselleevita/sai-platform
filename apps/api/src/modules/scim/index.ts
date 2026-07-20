@@ -1,0 +1,2 @@
+export { scimRouter } from './routes';
+

@@ -13,6 +13,17 @@ export const api = {
     endpoint: string,
     options: RequestInit = {}
   ): Promise<{ success: boolean; data?: T; error?: string }> {
+    // Prefer canonical API mount: `/api/v1/*`. Keep `/api/health*` and docs unmodified.
+    // This avoids relying on the server-side legacy redirect for most calls.
+    if (
+      endpoint.startsWith('/api/') &&
+      !endpoint.startsWith('/api/v1/') &&
+      !endpoint.startsWith('/api/health') &&
+      endpoint !== '/api-docs'
+    ) {
+      endpoint = `/api/v1/${endpoint.slice('/api/'.length)}`;
+    }
+
     const csrfToken = getCsrfToken();
 
     const headers: Record<string, string> = {
