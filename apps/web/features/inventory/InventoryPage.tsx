@@ -53,8 +53,16 @@ export default function InventoryPage() {
         throw new Error(result.error || 'Failed to load tools');
       }
 
-      setTools(result.data?.data || []);
-      setPagination(result.data?.pagination || pagination);
+      // The API returns either a flat array (`data: Tool[]`) or a paginated
+      // envelope (`data: { data: Tool[], pagination }`). Support both.
+      const payload: any = result.data;
+      const list: Tool[] = Array.isArray(payload) ? payload : (payload?.data ?? []);
+      setTools(list);
+      setPagination((prev) => ({
+        ...prev,
+        total: payload?.pagination?.total ?? list.length,
+        totalPages: payload?.pagination?.totalPages ?? 1,
+      }));
     } catch (err: any) {
       setError(err?.message || 'Failed to load tools. Please check your connection and try again.');
     } finally {
