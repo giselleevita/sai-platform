@@ -2,8 +2,6 @@
 
 This document is the **how to proceed** guide for everything still open after the first governance bridge (see [EVIDENTIA_GOVERNANCE.md](./EVIDENTIA_GOVERNANCE.md) for current wiring). It prioritizes **refactored, scalable code** over one-off hacks.
 
-For market and diligence framing, see [INVESTMENT_DILIGENCE_FULL_SPECTRUM.md](./INVESTMENT_DILIGENCE_FULL_SPECTRUM.md).
-
 ---
 
 ## 1. Guiding principles (do not violate)
@@ -242,5 +240,4 @@ You can honestly say “scales to mid-market multi-tenant” when:
 ## 9. Related docs
 
 - [EVIDENTIA_GOVERNANCE.md](./EVIDENTIA_GOVERNANCE.md) — current env + endpoints.  
-- [STRUCTURE.md](./STRUCTURE.md) — repo layout; extend with `integrations/` and `workers/` when Phase 2 lands.  
-- [INVESTMENT_DILIGENCE_FULL_SPECTRUM.md](./INVESTMENT_DILIGENCE_FULL_SPECTRUM.md) — product gaps and competitive framing.
+- [STRUCTURE.md](./STRUCTURE.md) — repo layout; extend with `integrations/` and `workers/` when Phase 2 lands.
