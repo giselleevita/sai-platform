@@ -3,6 +3,10 @@
 [![Quality Gate](https://github.com/giselleevita/sai-platform/actions/workflows/ci.yml/badge.svg)](https://github.com/giselleevita/sai-platform/actions/workflows/ci.yml)
 [![Security Checks](https://github.com/giselleevita/sai-platform/actions/workflows/security.yml/badge.svg)](https://github.com/giselleevita/sai-platform/actions/workflows/security.yml)
 
+<p align="center">
+  <img src="docs/assets/sai-demo.gif" alt="SAI Platform — AI governance dashboard: risk-scored tool inventory, executive overview, and audit-ready evidence" width="820" />
+</p>
+
 SAI Platform is a full-stack reference implementation for assessing AI risk, enforcing governance workflows, and producing audit-oriented evidence for regulations such as the EU AI Act and NIS2.
 
 It demonstrates a Next.js and Express/Prisma architecture with company-scoped data,

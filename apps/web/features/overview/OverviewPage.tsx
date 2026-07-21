@@ -66,7 +66,9 @@ export default function OverviewPage() {
           }
           throw new Error(toolsResult.error || 'Failed to load tools. Please check your connection.');
         }
-        setTools(toolsResult.data?.data || []);
+        // API returns either a flat array or a paginated envelope; support both.
+        const toolsPayload: any = toolsResult.data;
+        setTools(Array.isArray(toolsPayload) ? toolsPayload : (toolsPayload?.data ?? []));
 
         const summaryResult = await api.get<RiskSummary>('/api/inventory/summary');
         if (summaryResult.success) {
