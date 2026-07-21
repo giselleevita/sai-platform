@@ -1,7 +1,5 @@
 # SAI Platform
 
-> **Portfolio note:** Supporting repository. Featured evidence API in the public stack is [proofrail-evidence-api](https://github.com/giselleevita/proofrail-evidence-api). Flagship enforcement repo: [agent-security-gate](https://github.com/giselleevita/agent-security-gate).
-
 [![Quality Gate](https://github.com/giselleevita/sai-platform/actions/workflows/ci.yml/badge.svg)](https://github.com/giselleevita/sai-platform/actions/workflows/ci.yml)
 [![Security Checks](https://github.com/giselleevita/sai-platform/actions/workflows/security.yml/badge.svg)](https://github.com/giselleevita/sai-platform/actions/workflows/security.yml)
 
@@ -14,39 +12,12 @@ use.
 
 ## What It Does
 
-- **AI Tool Inventory** - Centralized registry of all AI tools with risk scoring
-- **Risk Management** - Automated risk assessment with likelihood/impact analysis
-- **Compliance Monitoring** - Policy enforcement, control tracking, and evidence management
-- **Incident Tracking** - Complete incident lifecycle management with reporting deadlines
-- **Audit Logging** - Comprehensive audit trail with activity feed
-- **Report Generation** - PDF reports, Excel exports, and custom report builder
-- **Governance Workflows** - Policy management, control tracking, and decision traceability
-
-## Key Features
-
-### Core Capabilities
-- **AI Tool Inventory** - Register, categorize, and track AI tools
-- **Explainable Risk Scoring** - Calculate risk from documented factors
-- **Risk Decision Management** - Accept, defer, or reject risks with sign-off records
-- **Policy & Control Management** - Manage policies, controls, and procedures
-- **Evidence Governance** - Track evidence coverage, expiry, and approval status
-- **Incident Management** - Manage incident lifecycle and severity
-- **Compliance Dashboards** - Review compliance status and gaps
-- **Audit Logging** - Search and export activity records
-
-### Advanced Features
-- **Activity Feed** - Activity tracking across the platform
-- **Comments & Discussions** - Threaded comments on tools, risks, and incidents
-- **Excel Import/Export** - Bulk import tools and risks and export data
-- **Webhooks** - Event-based integrations with external systems
-- **Custom Fields** - Extensible organization-specific metadata
-- **API Documentation** - OpenAPI documentation
-
-### Security Controls
-- **httpOnly Cookies and CSRF Protection**
-- **Rate Limiting and Zod Input Validation**
-- **Role-Based Access Control**
-- **Soft Deletes and Structured Audit Logging**
+- **AI Tool Inventory** - Register, categorize, and track AI tools with explainable risk scoring from documented factors
+- **Risk Management** - Likelihood/impact analysis with accept/defer/reject decisions and sign-off records
+- **Governance & Compliance** - Policy and control management, evidence coverage and expiry tracking, and compliance dashboards
+- **Incident Tracking** - Complete incident lifecycle management with severity and reporting deadlines
+- **Audit Logging** - Searchable, exportable activity records with a platform-wide activity feed
+- **Reporting & Integrations** - PDF reports, Excel import/export, custom report builder, webhooks, custom fields, threaded comments, and OpenAPI documentation
 
 ## Architecture
 
@@ -102,6 +73,38 @@ Access:
 - **Frontend**: http://localhost:3000
 - **API**: http://localhost:3001
 - **API Docs**: http://localhost:3001/api-docs
+
+### First Run
+
+```bash
+# 5. Create an account
+# Open http://localhost:3000/auth/signup and sign up with
+# email test@sai.com and password Password123
+# (the sample-data script below logs in with these credentials)
+
+# 6. Populate sample data
+bash scripts/populate-sample-data.sh
+```
+
+Expected output:
+
+```
+✅ Got auth token
+Creating sample data...
+...
+🎉 Sample data creation complete!
+
+Summary:
+  ✅ 5 AI Tools
+  ✅ 3 Risks
+  ✅ 2 Policies
+  ✅ 3 Controls
+  ✅ 2 Evidence records
+  ✅ 2 Incidents
+  ✅ 2 Vendors
+```
+
+Reload http://localhost:3000 to land on a populated dashboard.
 
 ## Documentation
 
@@ -187,6 +190,10 @@ The repository includes deployment patterns for:
 - **Redis** - Optional caching layer (ElastiCache)
 
 See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for detailed deployment instructions.
+
+## Related Work
+
+This is a supporting repository in a broader portfolio. The featured evidence API in the public stack is [proofrail-evidence-api](https://github.com/giselleevita/proofrail-evidence-api), and the flagship enforcement repo is [agent-security-gate](https://github.com/giselleevita/agent-security-gate).
 
 ## License
 
