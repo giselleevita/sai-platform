@@ -1,8 +1,5 @@
-import puppeteer from 'puppeteer';
+import PDFDocument from 'pdfkit';
 import { prisma } from './prisma.client';
-
-// Note: puppeteer may need to be installed with: npm install puppeteer
-// If puppeteer fails, you can use pdfkit as an alternative
 
 export interface ReportOptions {
   type: 'risk-assessment' | 'compliance' | 'executive-summary' | 'custom';
@@ -37,33 +34,75 @@ export class PDFReportService {
   }
 
   /**
-   * Convert HTML to PDF using Puppeteer
+   * Convert generated report HTML to a text-first PDF.
+   * This intentionally avoids a headless browser dependency for server-side reports.
    */
   private static async htmlToPDF(html: string): Promise<Buffer> {
-    const browser = await puppeteer.launch({
-      headless: true,
-      args: ['--no-sandbox', '--disable-setuid-sandbox'],
-    });
-
-    try {
-      const page = await browser.newPage();
-      await page.setContent(html, { waitUntil: 'networkidle0' });
-      
-      const pdf = await page.pdf({
-        format: 'A4',
-        printBackground: true,
-        margin: {
-          top: '20mm',
-          right: '15mm',
-          bottom: '20mm',
-          left: '15mm',
-        },
+    return new Promise((resolve, reject) => {
+      const doc = new PDFDocument({
+        size: 'A4',
+        margins: { top: 56, right: 44, bottom: 56, left: 44 },
+        bufferPages: true,
       });
+      const chunks: Buffer[] = [];
 
-      return Buffer.from(pdf);
-    } finally {
-      await browser.close();
-    }
+      doc.on('data', (chunk) => chunks.push(Buffer.from(chunk)));
+      doc.on('end', () => resolve(Buffer.concat(chunks)));
+      doc.on('error', reject);
+
+      const lines = this.htmlToPlainText(html);
+      for (const line of lines) {
+        if (line.startsWith('# ')) {
+          doc.moveDown(0.5).fontSize(20).font('Helvetica-Bold').text(line.slice(2));
+        } else if (line.startsWith('## ')) {
+          doc.moveDown(0.5).fontSize(15).font('Helvetica-Bold').text(line.slice(3));
+        } else if (line.startsWith('### ')) {
+          doc.moveDown(0.4).fontSize(12).font('Helvetica-Bold').text(line.slice(4));
+        } else {
+          doc.fontSize(9).font('Helvetica').text(line, { lineGap: 2 });
+        }
+      }
+
+      const range = doc.bufferedPageRange();
+      for (let pageIndex = range.start; pageIndex < range.start + range.count; pageIndex++) {
+        doc.switchToPage(pageIndex);
+        doc.fontSize(8).fillColor('#6b7280').text(
+          `SAI Platform Audit Report • Page ${pageIndex + 1} of ${range.count}`,
+          44,
+          doc.page.height - 36,
+          { align: 'center' },
+        );
+        doc.fillColor('#000000');
+      }
+
+      doc.end();
+    });
+  }
+
+  private static htmlToPlainText(html: string): string[] {
+    return html
+      .replace(/<style[\s\S]*?<\/style>/gi, '')
+      .replace(/<script[\s\S]*?<\/script>/gi, '')
+      .replace(/<h1[^>]*>/gi, '\n# ')
+      .replace(/<h2[^>]*>/gi, '\n## ')
+      .replace(/<h3[^>]*>/gi, '\n### ')
+      .replace(/<\/h[1-3]>/gi, '\n')
+      .replace(/<tr[^>]*>/gi, '\n')
+      .replace(/<\/td>\s*<td[^>]*>/gi, ' | ')
+      .replace(/<\/th>\s*<th[^>]*>/gi, ' | ')
+      .replace(/<li[^>]*>/gi, '\n• ')
+      .replace(/<br\s*\/?>/gi, '\n')
+      .replace(/<\/(p|div|table|section|ul)>/gi, '\n')
+      .replace(/<[^>]+>/g, '')
+      .replace(/&nbsp;/g, ' ')
+      .replace(/&amp;/g, '&')
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&quot;/g, '"')
+      .replace(/&#39;/g, "'")
+      .split('\n')
+      .map((line) => line.replace(/[ \t]+/g, ' ').trim())
+      .filter(Boolean);
   }
 
   /**
