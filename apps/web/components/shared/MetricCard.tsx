@@ -10,3 +10,4 @@ export function MetricCard(props: { title: string; value: React.ReactNode; hint?
   );
 }
 
+export const MetricTile = MetricCard;

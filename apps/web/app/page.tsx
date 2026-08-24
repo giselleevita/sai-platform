@@ -1,10 +1,19 @@
 'use client';
 
 import Link from 'next/link';
-import { useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { useEffect, useState } from 'react';
+import { hasAuthSession, syncCsrfFromCookieToStorage } from '@/lib/auth';
 
 export default function Home() {
+  const router = useRouter();
   const [showAuditorView, setShowAuditorView] = useState(false);
+
+  useEffect(() => {
+    syncCsrfFromCookieToStorage();
+    if (hasAuthSession()) router.replace('/dashboard');
+  }, [router]);
+
   return (
     <div className="bg-gray-50 text-gray-900">
       {/* Hero */}

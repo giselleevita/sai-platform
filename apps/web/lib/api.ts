@@ -13,6 +13,17 @@ export const api = {
     endpoint: string,
     options: RequestInit = {}
   ): Promise<{ success: boolean; data?: T; error?: string }> {
+    // Prefer canonical API mount: `/api/v1/*`. Keep `/api/health*` and docs unmodified.
+    // This avoids relying on the server-side legacy redirect for most calls.
+    if (
+      endpoint.startsWith('/api/') &&
+      !endpoint.startsWith('/api/v1/') &&
+      !endpoint.startsWith('/api/health') &&
+      endpoint !== '/api-docs'
+    ) {
+      endpoint = `/api/v1/${endpoint.slice('/api/'.length)}`;
+    }
+
     const csrfToken = getCsrfToken();
 
     const headers: Record<string, string> = {
@@ -100,5 +111,48 @@ export const api = {
 
   delete<T>(endpoint: string) {
     return this.request<T>(endpoint, { method: 'DELETE' });
+  },
+
+  unwrapRows<T>(payload: T[] | { data?: T[]; rows?: T[]; items?: T[] } | undefined): T[] {
+    if (Array.isArray(payload)) return payload;
+    return payload?.data || payload?.rows || payload?.items || [];
+  },
+
+  async download(endpoint: string, filename: string): Promise<{ success: boolean; error?: string }> {
+    if (
+      endpoint.startsWith('/api/') &&
+      !endpoint.startsWith('/api/v1/') &&
+      !endpoint.startsWith('/api/health') &&
+      endpoint !== '/api-docs'
+    ) {
+      endpoint = `/api/v1/${endpoint.slice('/api/'.length)}`;
+    }
+
+    try {
+      const response = await fetch(`${API_URL}${endpoint}`, {
+        method: 'GET',
+        credentials: 'include',
+        headers: {
+          ...(getCsrfToken() ? { 'X-CSRF-Token': getCsrfToken() || '' } : {}),
+        },
+      });
+
+      if (!response.ok) {
+        return { success: false, error: `Download failed with status ${response.status}` };
+      }
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Download failed' };
+    }
   },
 };

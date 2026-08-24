@@ -1,79 +1,115 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 
 import { api } from '@/lib/api';
-import type { Tool, RiskSummary } from '@/types';
-import { useKeyboardShortcuts, commonShortcuts } from '@/hooks/useKeyboardShortcuts';
 import { hasAuthSession, syncCsrfFromCookieToStorage } from '@/lib/auth';
-import { LoadingSpinner, MetricCard, PageHeader } from '@/components/shared';
+import type { RiskSummary, Tool } from '@/types';
+import { DataTable, EmptyState, LoadingSpinner, MetricCard, PageHeader, StatusBadge } from '@/components/shared';
+
+type Paginated<T> = { data: T[]; pagination?: unknown };
+
+type Risk = {
+  id: string;
+  title: string;
+  likelihood: number;
+  impact: number;
+  updatedAt: string;
+  decisions?: Array<{ id: string; decision: string }>;
+};
+
+type Evidence = {
+  id: string;
+  status: string;
+  validTo?: string;
+  control?: { name?: string };
+  controlId: string;
+};
+
+type Incident = {
+  id: string;
+  title: string;
+  severity: string;
+  status: string;
+  updatedAt: string;
+};
+
+type ExceptionRecord = {
+  id: string;
+  status: string;
+};
+
+type AuditLog = {
+  id: string;
+  action: string;
+  targetType: string;
+  targetId?: string;
+  createdAt: string;
+};
+
+function rows<T>(payload?: T[] | Paginated<T>): T[] {
+  if (Array.isArray(payload)) return payload;
+  if (payload && Array.isArray(payload.data)) return payload.data;
+  return [];
+}
+
+function isExpired(date?: string) {
+  return Boolean(date && new Date(date) < new Date());
+}
+
+function riskScore(risk: Risk) {
+  return risk.likelihood * risk.impact;
+}
 
 export default function OverviewPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
   const [tools, setTools] = useState<Tool[]>([]);
   const [summary, setSummary] = useState<RiskSummary | null>(null);
-  const [error, setError] = useState('');
+  const [risks, setRisks] = useState<Risk[]>([]);
+  const [evidence, setEvidence] = useState<Evidence[]>([]);
+  const [incidents, setIncidents] = useState<Incident[]>([]);
+  const [exceptions, setExceptions] = useState<ExceptionRecord[]>([]);
+  const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
   const [reloadKey, setReloadKey] = useState(0);
-  const [showTourCta, setShowTourCta] = useState(false);
-
-  useKeyboardShortcuts(commonShortcuts(router));
-
-  /** After SSO, confirm session and strip `?oidc=1` from the URL bar. */
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    const params = new URLSearchParams(window.location.search);
-    if (params.get('oidc') !== '1') return;
-
-    syncCsrfFromCookieToStorage();
-
-    void (async () => {
-      const me = await api.get('/api/auth/me');
-      if (!me.success) {
-        router.push('/auth/login');
-        return;
-      }
-      const url = new URL(window.location.href);
-      url.searchParams.delete('oidc');
-      window.history.replaceState({}, '', url.pathname + (url.search ? url.search : ''));
-    })();
-  }, [router]);
 
   useEffect(() => {
     const loadData = async () => {
+      if (!hasAuthSession()) {
+        router.push('/auth/login');
+        return;
+      }
+
+      syncCsrfFromCookieToStorage();
+      setLoading(true);
+      setError('');
+
       try {
-        if (!hasAuthSession()) {
-          router.push('/auth/login');
-          return;
-        }
+        const [toolsResult, summaryResult, risksResult, evidenceResult, incidentsResult, exceptionsResult, auditResult] =
+          await Promise.all([
+            api.get<Paginated<Tool>>('/api/inventory?limit=10'),
+            api.get<RiskSummary>('/api/inventory/summary'),
+            api.get<Paginated<Risk> | Risk[]>('/api/risks?limit=10'),
+            api.get<Paginated<Evidence> | Evidence[]>('/api/evidence?limit=100'),
+            api.get<Paginated<Incident> | Incident[]>('/api/incidents?limit=10'),
+            api.get<Paginated<ExceptionRecord> | ExceptionRecord[]>('/api/exceptions?limit=100'),
+            api.get<Paginated<AuditLog> | AuditLog[]>('/api/audit?limit=8'),
+          ]);
 
-        syncCsrfFromCookieToStorage();
+        if (!toolsResult.success) throw new Error(toolsResult.error || 'Failed to load dashboard');
 
-        try {
-          const onboardingCompleted = localStorage.getItem('onboarding_completed');
-          setShowTourCta(!onboardingCompleted);
-        } catch {
-          // ignore
-        }
-
-        const toolsResult = await api.get<{ data: Tool[]; pagination: any }>('/api/inventory?limit=10');
-        if (!toolsResult.success) {
-          if (toolsResult.error?.includes('401') || toolsResult.error?.includes('unauthorized')) {
-            router.push('/auth/login');
-            return;
-          }
-          throw new Error(toolsResult.error || 'Failed to load tools. Please check your connection.');
-        }
-        setTools(toolsResult.data?.data || []);
-
-        const summaryResult = await api.get<RiskSummary>('/api/inventory/summary');
-        if (summaryResult.success) {
-          setSummary(summaryResult.data || null);
-        }
+        setTools(rows(toolsResult.data));
+        if (summaryResult.success) setSummary(summaryResult.data || null);
+        if (risksResult.success) setRisks(rows(risksResult.data));
+        if (evidenceResult.success) setEvidence(rows(evidenceResult.data));
+        if (incidentsResult.success) setIncidents(rows(incidentsResult.data));
+        if (exceptionsResult.success) setExceptions(rows(exceptionsResult.data));
+        if (auditResult.success) setAuditLogs(rows(auditResult.data));
       } catch (err: any) {
-        setError(err?.message || 'Failed to load dashboard. Please try refreshing the page.');
+        setError(err?.message || 'Failed to load dashboard');
       } finally {
         setLoading(false);
       }
@@ -82,243 +118,200 @@ export default function OverviewPage() {
     void loadData();
   }, [router, reloadKey]);
 
-  const getRiskColor = (level: string) => {
-    switch (level) {
-      case 'Critical':
-        return 'bg-red-100 text-red-800';
-      case 'High':
-        return 'bg-orange-100 text-orange-800';
-      case 'Medium':
-        return 'bg-yellow-100 text-yellow-800';
-      case 'Low':
-        return 'bg-green-100 text-green-800';
-      default:
-        return 'bg-gray-100 text-gray-800';
-    }
-  };
+  const metrics = useMemo(() => {
+    const highRiskTools = (summary?.riskCounts?.critical || 0) + (summary?.riskCounts?.high || 0);
+    const highRisks = risks.filter((risk) => riskScore(risk) >= 12).length;
+    const evidenceIssues = evidence.filter(
+      (item) => item.status === 'MISSING' || item.status === 'EXPIRED' || isExpired(item.validTo)
+    ).length;
+    const openIncidents = incidents.filter((incident) => !['RESOLVED', 'REVIEWED'].includes(incident.status)).length;
+    const pendingDecisions =
+      risks.filter((risk) => !risk.decisions || risk.decisions.length === 0).length +
+      exceptions.filter((item) => item.status === 'Pending' || item.status === 'PENDING').length;
+    const totalObligations = Math.max(evidence.length + risks.length + incidents.length + exceptions.length, 1);
+    const openGaps = evidenceIssues + highRisks + openIncidents + pendingDecisions;
+    const readiness = Math.max(0, Math.round(((totalObligations - openGaps) / totalObligations) * 100));
 
-  const attentionTools = useMemo(() => {
-    const ranked = [...tools].sort((a, b) => (b.riskScore || 0) - (a.riskScore || 0));
-    return ranked.filter((t) => t.riskLevel === 'Critical' || t.riskLevel === 'High').slice(0, 5);
-  }, [tools]);
+    return { highRiskTools, highRisks, evidenceIssues, openIncidents, pendingDecisions, readiness };
+  }, [evidence, exceptions, incidents, risks, summary]);
 
-  const exportAuditPackage = async () => {
-    const res = await api.get<any>('/api/reports/audit-package');
-    if (!res.success) {
-      setError(res.error || 'Failed to export audit package');
-      return;
-    }
-    const payload = JSON.stringify(res.data, null, 2);
-    const blob = new Blob([payload], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `audit-package-${new Date().toISOString().slice(0, 10)}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
-  };
+  const attentionItems = useMemo(() => {
+    const toolItems = tools
+      .filter((tool) => tool.riskLevel === 'Critical' || tool.riskLevel === 'High')
+      .map((tool) => ({
+        id: `tool-${tool.id}`,
+        area: 'Inventory',
+        item: tool.name,
+        status: tool.riskLevel,
+        href: `/inventory/${tool.id}`,
+      }));
+    const riskItems = risks
+      .filter((risk) => riskScore(risk) >= 12)
+      .map((risk) => ({
+        id: `risk-${risk.id}`,
+        area: 'Risk',
+        item: risk.title,
+        status: riskScore(risk) >= 20 ? 'Critical' : 'High',
+        href: `/risks/${risk.id}`,
+      }));
+    const incidentItems = incidents
+      .filter((incident) => !['RESOLVED', 'REVIEWED'].includes(incident.status))
+      .map((incident) => ({
+        id: `incident-${incident.id}`,
+        area: 'Incident',
+        item: incident.title,
+        status: incident.status,
+        href: '/incidents',
+      }));
+    return [...toolItems, ...riskItems, ...incidentItems].slice(0, 8);
+  }, [incidents, risks, tools]);
 
   if (loading) return <LoadingSpinner />;
 
   return (
     <>
       <PageHeader
-        title="Overview"
-        subtitle="Executive posture across inventory, risk, and compliance."
+        title="Management Dashboard"
+        subtitle="Governance readiness, open gaps, accountability, and recent audit activity."
         right={
           <>
-            {showTourCta ? (
-              <Link
-                href="/onboarding"
-                className="rounded-md border border-gray-300 dark:border-gray-800 bg-white dark:bg-gray-900 px-3 py-2 text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800"
-              >
-                Take tour
-              </Link>
-            ) : null}
             <Link
-              href="/inventory/add"
-              className="rounded-md bg-blue-600 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-700"
+              href="/reports"
+              className="rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-800"
             >
-              Add tool
+              Reports
             </Link>
-            <button
-              type="button"
-              onClick={() => void exportAuditPackage()}
-              className="rounded-md border border-gray-300 dark:border-gray-800 bg-white dark:bg-gray-900 px-3 py-2 text-sm font-semibold text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800"
+            <Link
+              href="/governance"
+              className="rounded-md bg-gray-900 px-3 py-2 text-sm font-semibold text-white hover:bg-gray-800 dark:bg-gray-100 dark:text-gray-950 dark:hover:bg-white"
             >
-              Export audit package
-            </button>
+              Governance registry
+            </Link>
           </>
         }
       />
 
-      <div className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8 space-y-8">
-        {error && (
-          <div className="rounded-md bg-red-50 border border-red-200 p-4 text-sm text-red-800 flex items-center justify-between gap-3">
-            <span className="min-w-0">{error}</span>
+      <div className="mx-auto max-w-7xl space-y-6 px-4 py-6 sm:px-6 lg:px-8">
+        {error ? (
+          <div className="flex items-center justify-between gap-3 rounded-md border border-red-200 bg-red-50 p-4 text-sm text-red-800">
+            <span>{error}</span>
             <button
               type="button"
-              onClick={() => {
-                setError('');
-                setReloadKey((key) => key + 1);
-              }}
-              className="shrink-0 rounded-md border border-red-200 bg-white px-3 py-2 text-xs font-semibold text-red-700 hover:bg-red-50"
+              onClick={() => setReloadKey((key) => key + 1)}
+              className="rounded-md border border-red-200 bg-white px-3 py-2 text-xs font-semibold text-red-700 hover:bg-red-50"
             >
               Retry
             </button>
           </div>
-        )}
+        ) : null}
 
-        <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
-          <MetricCard title="Total tools" value={summary?.totalTools ?? '—'} />
-          <MetricCard title="Critical" value={summary?.riskCounts?.critical ?? '—'} />
-          <MetricCard title="High" value={summary?.riskCounts?.high ?? '—'} />
-          <MetricCard title="Medium" value={summary?.riskCounts?.medium ?? '—'} />
-          <MetricCard title="Avg risk score" value={summary?.averageRiskScore ?? '—'} />
+        <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
+          <MetricCard title="Audit readiness" value={`${metrics.readiness}%`} hint="Calculated from open gaps" />
+          <MetricCard title="Evidence gaps" value={metrics.evidenceIssues} hint="Missing, expired, or overdue" />
+          <MetricCard title="High risks" value={metrics.highRisks + metrics.highRiskTools} hint="Risks and AI tools" />
+          <MetricCard title="Open incidents" value={metrics.openIncidents} hint="Not resolved or reviewed" />
+          <MetricCard title="Pending decisions" value={metrics.pendingDecisions} hint="Risks and exceptions" />
+          <MetricCard title="Total tools" value={summary?.totalTools ?? tools.length} hint="Registered inventory" />
         </section>
 
-        <section className="grid gap-4 lg:grid-cols-3">
-          <div className="lg:col-span-2 rounded-lg border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-4 shadow-sm">
-            <div className="flex items-center justify-between gap-3">
-              <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">Needs attention</h2>
-              <Link href="/risks" className="text-sm font-medium text-blue-600 hover:text-blue-700">
+        <section className="grid gap-6 lg:grid-cols-3">
+          <div className="lg:col-span-2">
+            <div className="mb-3 flex items-center justify-between">
+              <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">Needs Management Attention</h2>
+              <Link href="/risks" className="text-sm font-semibold text-blue-600 hover:text-blue-700">
                 Open risk register
               </Link>
             </div>
-            <div className="mt-3 space-y-2">
-              {attentionTools.length === 0 ? (
-                <div className="text-sm text-gray-600 dark:text-gray-300">
-                  No critical/high tools in the current top list.
-                </div>
-              ) : (
-                attentionTools.map((t) => (
-                  <div
-                    key={t.id}
-                    className="flex items-center justify-between gap-3 rounded-md border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-950 px-3 py-2"
-                  >
-                    <div className="min-w-0">
-                      <div className="truncate text-sm font-medium text-gray-900 dark:text-gray-100">{t.name}</div>
-                      <div className="text-xs text-gray-600 dark:text-gray-400">
-                        {t.category} · score {t.riskScore}
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span className={['px-2 py-1 text-xs font-semibold rounded-full', getRiskColor(t.riskLevel)].join(' ')}>
-                        {t.riskLevel}
-                      </span>
-                      <Link href={`/inventory/${t.id}`} className="text-sm font-medium text-blue-600 hover:text-blue-700">
-                        View
-                      </Link>
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
+            <DataTable
+              rows={attentionItems}
+              columns={[
+                { key: 'area', header: 'Area', render: (row) => row.area },
+                {
+                  key: 'item',
+                  header: 'Item',
+                  render: (row) => <span className="font-medium text-gray-900 dark:text-gray-100">{row.item}</span>,
+                },
+                { key: 'status', header: 'Status', render: (row) => <StatusBadge value={row.status} /> },
+                {
+                  key: 'action',
+                  header: 'Action',
+                  align: 'right',
+                  render: (row) => (
+                    <Link href={row.href} className="font-semibold text-blue-600 hover:text-blue-700">
+                      Review
+                    </Link>
+                  ),
+                },
+              ]}
+              empty={
+                <EmptyState
+                  title="No urgent gaps"
+                  message="No high risks, unresolved incidents, or critical tool risks are currently in the first-page results."
+                />
+              }
+            />
           </div>
 
-          <div className="rounded-lg border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-4 shadow-sm space-y-3">
-            <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">Quick paths</h2>
-            <div className="grid gap-2">
-              <Link
-                href="/inventory"
-                className="rounded-md border border-gray-200 dark:border-gray-800 px-3 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800"
-              >
-                Inventory
-              </Link>
-              <Link
-                href="/compliance"
-                className="rounded-md border border-gray-200 dark:border-gray-800 px-3 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800"
-              >
-                Compliance snapshots
-              </Link>
-              <Link
-                href="/review-queue"
-                className="rounded-md border border-gray-200 dark:border-gray-800 px-3 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800"
-              >
-                My review queue
-              </Link>
-              <Link
-                href="/integrations/evidentia"
-                className="rounded-md border border-gray-200 dark:border-gray-800 px-3 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800"
-              >
-                Integrations
-              </Link>
+          <div className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm dark:border-gray-800 dark:bg-gray-900">
+            <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">Audit Readiness Checklist</h2>
+            <div className="mt-4 space-y-3 text-sm">
+              {[
+                { label: 'Controls linked to evidence', ok: metrics.evidenceIssues === 0 },
+                { label: 'Critical risks have decisions', ok: metrics.pendingDecisions === 0 },
+                { label: 'Incidents reviewed', ok: metrics.openIncidents === 0 },
+                { label: 'High-risk tools visible', ok: true },
+              ].map((item) => (
+                <div key={item.label} className="flex items-center justify-between gap-3">
+                  <span className="text-gray-700 dark:text-gray-200">{item.label}</span>
+                  <StatusBadge value={item.ok ? 'Ready' : 'Gap'} tone={item.ok ? 'success' : 'danger'} />
+                </div>
+              ))}
             </div>
           </div>
         </section>
 
-        <section className="rounded-lg border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 shadow-sm">
-          <div className="px-4 py-4 sm:px-6 flex items-center justify-between gap-3 border-b border-gray-200 dark:border-gray-800">
-            <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">Top tools (sample)</h2>
-            <Link href="/inventory" className="text-sm font-medium text-blue-600 hover:text-blue-700">
-              Open inventory →
-            </Link>
+        <section className="grid gap-6 lg:grid-cols-2">
+          <div>
+            <div className="mb-3 flex items-center justify-between">
+              <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">Recent Audit Events</h2>
+              <Link href="/audit" className="text-sm font-semibold text-blue-600 hover:text-blue-700">
+                View all
+              </Link>
+            </div>
+            <DataTable
+              rows={auditLogs}
+              columns={[
+                { key: 'action', header: 'Action', render: (row) => <span className="font-medium">{row.action}</span> },
+                { key: 'targetType', header: 'Target', render: (row) => row.targetType },
+                { key: 'createdAt', header: 'Time', render: (row) => new Date(row.createdAt).toLocaleString() },
+              ]}
+              empty={<EmptyState title="No audit activity" message="Governance changes and decisions will appear here once users take action." />}
+            />
           </div>
 
-          {tools.length === 0 ? (
-            <div className="px-4 py-12 sm:px-6 text-center">
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">No tools yet</h3>
-              <p className="mt-2 text-sm text-gray-600 dark:text-gray-300">
-                Add your first tool to unlock risk scoring, inventory tracking, and reporting.
-              </p>
-              <div className="mt-5 flex flex-col items-center justify-center gap-3 sm:flex-row">
-                <Link
-                  href="/inventory/add"
-                  className="inline-flex items-center rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
-                >
-                  Add your first tool
-                </Link>
-                <Link
-                  href="/risks"
-                  className="inline-flex items-center rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
-                >
-                  Open risk register
-                </Link>
-              </div>
+          <div>
+            <div className="mb-3 flex items-center justify-between">
+              <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">Evidence Coverage</h2>
+              <Link href="/evidence" className="text-sm font-semibold text-blue-600 hover:text-blue-700">
+                Open evidence
+              </Link>
             </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-800">
-                <thead className="bg-gray-50 dark:bg-gray-950">
-                  <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Category</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Users</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Risk Level</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Score</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Data Types</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white dark:bg-gray-900 divide-y divide-gray-200 dark:divide-gray-800">
-                  {tools.map((tool) => (
-                    <tr key={tool.id}>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-gray-100">
-                        {tool.name}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">{tool.category}</td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">{tool.users}</td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${getRiskColor(tool.riskLevel)}`}>
-                          {tool.riskLevel}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">{tool.riskScore}</td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">{tool.dataTypes.join(', ')}</td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                        <Link href={`/inventory/${tool.id}`} className="text-blue-600 hover:text-blue-900">
-                          View
-                        </Link>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
+            <DataTable
+              rows={evidence.slice(0, 8)}
+              columns={[
+                { key: 'control', header: 'Control', render: (row) => row.control?.name || row.controlId },
+                { key: 'status', header: 'Status', render: (row) => <StatusBadge value={isExpired(row.validTo) ? 'EXPIRED' : row.status} /> },
+                {
+                  key: 'validTo',
+                  header: 'Valid Until',
+                  render: (row) => (row.validTo ? new Date(row.validTo).toLocaleDateString() : 'Not set'),
+                },
+              ]}
+              empty={<EmptyState title="No evidence records" message="Add evidence records to controls to start measuring audit coverage." />}
+            />
+          </div>
         </section>
       </div>
     </>
   );
 }
-

@@ -1,12 +1,13 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { AppLayout } from '@/components/shared';
+
+import { AppLayout, DataTable, EmptyState, LoadingSpinner, MetricCard, PageHeader, StatusBadge } from '@/components/shared';
 import { api } from '@/lib/api';
 import { redirectToLoginIfNoSession } from '@/lib/auth';
 
-interface ActivityItem {
+type ActivityItem = {
   id: string;
   type: 'tool' | 'risk' | 'incident' | 'policy' | 'control' | 'evidence';
   action: 'created' | 'updated' | 'deleted' | 'commented' | 'approved' | 'rejected';
@@ -18,7 +19,18 @@ interface ActivityItem {
     email: string;
   };
   timestamp: string;
-  metadata?: Record<string, any>;
+  metadata?: Record<string, unknown>;
+};
+
+function unpack<T>(payload?: T[] | { data: T[] }): T[] {
+  if (Array.isArray(payload)) return payload;
+  if (payload && Array.isArray(payload.data)) return payload.data;
+  return [];
+}
+
+function formatTime(timestamp: string) {
+  const date = new Date(timestamp);
+  return Number.isNaN(date.getTime()) ? 'Unknown' : date.toLocaleString();
 }
 
 export default function ActivityPage() {
@@ -28,159 +40,108 @@ export default function ActivityPage() {
   const [error, setError] = useState('');
   const [filter, setFilter] = useState<string>('all');
 
+  const loadActivities = async () => {
+    if (redirectToLoginIfNoSession(router)) return;
+    setLoading(true);
+    setError('');
+
+    const params = new URLSearchParams();
+    if (filter !== 'all') params.append('type', filter);
+
+    const result = await api.get<ActivityItem[] | { data: ActivityItem[] }>(`/api/activity?${params}`);
+    if (result.success) {
+      setActivities(unpack(result.data));
+    } else {
+      setError(result.error || 'Failed to load activity feed');
+    }
+    setLoading(false);
+  };
+
   useEffect(() => {
-    loadActivities();
+    void loadActivities();
   }, [filter]);
 
-  const loadActivities = async () => {
-    try {
-      setLoading(true);
-      setError('');
-      if (redirectToLoginIfNoSession(router)) return;
+  const metrics = useMemo(
+    () => ({
+      total: activities.length,
+      approvals: activities.filter((item) => item.action === 'approved').length,
+      rejections: activities.filter((item) => item.action === 'rejected').length,
+      changes: activities.filter((item) => item.action === 'created' || item.action === 'updated').length,
+    }),
+    [activities]
+  );
 
-      const params = new URLSearchParams();
-      if (filter !== 'all') {
-        params.append('type', filter);
-      }
-
-      const result = await api.get<ActivityItem[]>(`/api/activity?${params}`);
-      if (result.success && result.data) {
-        setActivities(result.data);
-      } else {
-        setError(result.error || 'Failed to load activity feed');
-      }
-    } catch (err: any) {
-      setError(err?.message || 'Failed to load activity feed');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const getActionIcon = (action: string) => {
-    switch (action) {
-      case 'created':
-        return '➕';
-      case 'updated':
-        return '✏️';
-      case 'deleted':
-        return '🗑️';
-      case 'commented':
-        return '💬';
-      case 'approved':
-        return '✅';
-      case 'rejected':
-        return '❌';
-      default:
-        return '📝';
-    }
-  };
-
-  const getTypeIcon = (type: string) => {
-    switch (type) {
-      case 'tool':
-        return '📦';
-      case 'risk':
-        return '⚠️';
-      case 'incident':
-        return '🚨';
-      case 'policy':
-        return '📋';
-      case 'control':
-        return '🛡️';
-      case 'evidence':
-        return '📄';
-      default:
-        return '📝';
-    }
-  };
-
-  const formatTime = (timestamp: string) => {
-    const date = new Date(timestamp);
-    const now = new Date();
-    const diff = now.getTime() - date.getTime();
-    const minutes = Math.floor(diff / 60000);
-    const hours = Math.floor(diff / 3600000);
-    const days = Math.floor(diff / 86400000);
-
-    if (minutes < 1) return 'Just now';
-    if (minutes < 60) return `${minutes}m ago`;
-    if (hours < 24) return `${hours}h ago`;
-    if (days < 7) return `${days}d ago`;
-    return date.toLocaleDateString();
-  };
+  if (loading) {
+    return (
+      <AppLayout>
+        <LoadingSpinner />
+      </AppLayout>
+    );
+  }
 
   return (
     <AppLayout>
-      <div className="max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900">Activity Feed</h1>
-          <p className="mt-2 text-sm text-gray-600">
-            Recent changes and updates across your platform
-          </p>
-        </div>
+      <PageHeader title="Activity" subtitle="Recent changes across governance, risk, evidence, and incidents." />
 
-        {/* Filters */}
-        <div className="mb-6 bg-white rounded-lg shadow p-4">
-          <div className="flex gap-2">
-            {['all', 'tool', 'risk', 'incident', 'policy', 'control'].map((type) => (
+      <div className="mx-auto max-w-7xl space-y-6 px-4 py-6 sm:px-6 lg:px-8">
+        {error ? <div className="rounded-md border border-red-200 bg-red-50 p-4 text-sm text-red-800">{error}</div> : null}
+
+        <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <MetricCard title="Events" value={metrics.total} hint="Current filtered view" />
+          <MetricCard title="Approvals" value={metrics.approvals} hint="Approved actions" />
+          <MetricCard title="Rejections" value={metrics.rejections} hint="Rejected actions" />
+          <MetricCard title="Changes" value={metrics.changes} hint="Created or updated" />
+        </section>
+
+        <section className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm dark:border-gray-800 dark:bg-gray-900">
+          <div className="flex flex-wrap gap-2">
+            {['all', 'tool', 'risk', 'incident', 'policy', 'control', 'evidence'].map((type) => (
               <button
                 key={type}
+                type="button"
                 onClick={() => setFilter(type)}
-                className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                className={[
+                  'rounded-md border px-3 py-2 text-sm font-semibold',
                   filter === type
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
-                }`}
+                    ? 'border-gray-900 bg-gray-900 text-white dark:border-gray-100 dark:bg-gray-100 dark:text-gray-950'
+                    : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-800',
+                ].join(' ')}
               >
                 {type.charAt(0).toUpperCase() + type.slice(1)}
               </button>
             ))}
           </div>
-        </div>
+        </section>
 
-        {/* Activity List */}
-        {loading ? (
-          <div className="text-center py-12 bg-white rounded-lg shadow">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto"></div>
-            <p className="mt-4 text-gray-500">Loading activity...</p>
-          </div>
-        ) : error ? (
-          <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-            <p className="text-red-800">{error}</p>
-          </div>
-        ) : activities.length === 0 ? (
-          <div className="text-center py-12 bg-white rounded-lg shadow">
-            <p className="text-gray-500 text-lg">No activity found</p>
-          </div>
-        ) : (
-          <div className="bg-white rounded-lg shadow divide-y divide-gray-200">
-            {activities.map((activity) => (
-              <div key={activity.id} className="p-4 hover:bg-gray-50 transition-colors">
-                <div className="flex items-start gap-3">
-                  <div className="text-2xl">
-                    {getActionIcon(activity.action)} {getTypeIcon(activity.type)}
-                  </div>
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2">
-                      <span className="font-medium text-gray-900">
-                        {activity.actor.name}
-                      </span>
-                      <span className="text-gray-600">
-                        {activity.action} {activity.type}
-                      </span>
-                      <span className="font-medium text-gray-900">
-                        {activity.targetName}
-                      </span>
-                    </div>
-                    <p className="text-sm text-gray-500 mt-1">
-                      {formatTime(activity.timestamp)}
-                    </p>
-                  </div>
+        <DataTable
+          rows={activities}
+          columns={[
+            { key: 'type', header: 'Type', render: (item) => <StatusBadge value={item.type} tone="info" /> },
+            { key: 'action', header: 'Action', render: (item) => <StatusBadge value={item.action} /> },
+            {
+              key: 'target',
+              header: 'Target',
+              render: (item) => (
+                <div>
+                  <div className="font-medium text-gray-900 dark:text-gray-100">{item.targetName}</div>
+                  <div className="mt-1 text-xs text-gray-500 dark:text-gray-400">{item.targetId}</div>
                 </div>
-              </div>
-            ))}
-          </div>
-        )}
+              ),
+            },
+            {
+              key: 'actor',
+              header: 'Actor',
+              render: (item) => (
+                <div>
+                  <div className="font-medium">{item.actor.name}</div>
+                  <div className="mt-1 text-xs text-gray-500">{item.actor.email}</div>
+                </div>
+              ),
+            },
+            { key: 'time', header: 'Time', render: (item) => formatTime(item.timestamp) },
+          ]}
+          empty={<EmptyState title="No activity" message="Governance actions will appear here as the team works." />}
+        />
       </div>
     </AppLayout>
   );

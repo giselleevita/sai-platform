@@ -4,9 +4,10 @@ import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 
+import { AppLayout, DataTable, EmptyState, LoadingSpinner, MetricCard, PageHeader, StatusBadge } from '@/components/shared';
+import { useCurrentUser } from '@/hooks';
 import { api } from '@/lib/api';
 import { redirectToLoginIfNoSession } from '@/lib/auth';
-import { AppLayout, PageHeader } from '@/components/shared';
 
 type QueueEvidence = {
   id: string;
@@ -21,27 +22,36 @@ type QueueEvidence = {
 
 type Control = { id: string; name: string };
 
+function unpack<T>(payload?: T[] | { data: T[] }): T[] {
+  if (Array.isArray(payload)) return payload;
+  if (payload && Array.isArray(payload.data)) return payload.data;
+  return [];
+}
+
 export default function ReviewQueuePage() {
   const router = useRouter();
+  const { canApprove } = useCurrentUser();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [items, setItems] = useState<QueueEvidence[]>([]);
   const [controls, setControls] = useState<Control[]>([]);
+  const [actionId, setActionId] = useState<string | null>(null);
 
-  const controlsById = useMemo(() => new Map(controls.map((c) => [c.id, c.name])), [controls]);
+  const controlsById = useMemo(() => new Map(controls.map((control) => [control.id, control.name])), [controls]);
 
   const load = async () => {
+    if (redirectToLoginIfNoSession(router)) return;
     setLoading(true);
     setError('');
-    if (redirectToLoginIfNoSession(router)) return;
 
-    const [q, cs] = await Promise.all([
-      api.get<QueueEvidence[]>('/api/evidence/review/queue'),
-      api.get<Control[]>('/api/governance/controls'),
+    const [queueResult, controlsResult] = await Promise.all([
+      api.get<QueueEvidence[] | { data: QueueEvidence[] }>('/api/evidence/review/queue'),
+      api.get<Control[] | { data: Control[] }>('/api/governance/controls'),
     ]);
-    if (!q.success) setError(q.error || 'Failed to load queue');
-    setItems(q.success && Array.isArray(q.data) ? q.data : []);
-    setControls(cs.success && Array.isArray(cs.data) ? cs.data : []);
+
+    if (!queueResult.success) setError(queueResult.error || 'Failed to load queue');
+    setItems(queueResult.success ? unpack(queueResult.data) : []);
+    setControls(controlsResult.success ? unpack(controlsResult.data) : []);
     setLoading(false);
   };
 
@@ -49,94 +59,103 @@ export default function ReviewQueuePage() {
     void load();
   }, []);
 
-  const approve = async (id: string) => {
-    const res = await api.patch(`/api/evidence/${id}`, { status: 'APPROVED' });
-    if (!res.success) {
-      setError(res.error || 'Failed to approve');
+  const updateEvidence = async (id: string, status: 'APPROVED' | 'MISSING') => {
+    setActionId(id);
+    setError('');
+    const result = await api.patch(`/api/evidence/${id}`, { status });
+    if (!result.success) {
+      setError(result.error || 'Failed to update evidence');
+      setActionId(null);
       return;
     }
+    setActionId(null);
     await load();
   };
 
-  const reject = async (id: string) => {
-    const res = await api.patch(`/api/evidence/${id}`, { status: 'MISSING' });
-    if (!res.success) {
-      setError(res.error || 'Failed to reject');
-      return;
-    }
-    await load();
-  };
+  if (loading) {
+    return (
+      <AppLayout>
+        <LoadingSpinner />
+      </AppLayout>
+    );
+  }
 
   return (
     <AppLayout>
       <PageHeader
-        title="My review queue"
-        subtitle="Evidence submitted and waiting for your review."
+        title="Review Queue"
+        subtitle="Submitted evidence waiting for management or admin review."
         right={
           <Link
             href="/evidence"
-            className="rounded-md border border-gray-300 dark:border-gray-800 bg-white dark:bg-gray-900 px-3 py-2 text-sm font-semibold text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800"
+            className="rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-200"
           >
             Go to evidence
           </Link>
         }
       />
 
-      <div className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
-        {error ? <div className="mb-4 rounded-md bg-red-50 border border-red-200 p-3 text-sm text-red-800">{error}</div> : null}
+      <div className="mx-auto max-w-7xl space-y-6 px-4 py-6 sm:px-6 lg:px-8">
+        {error ? <div className="rounded-md border border-red-200 bg-red-50 p-4 text-sm text-red-800">{error}</div> : null}
 
-        {loading ? (
-          <div className="text-sm text-gray-600 dark:text-gray-300">Loading…</div>
-        ) : items.length === 0 ? (
-          <div className="rounded-lg border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-8 text-center">
-            <div className="text-base font-semibold text-gray-900 dark:text-gray-100">Nothing to review</div>
-            <div className="mt-2 text-sm text-gray-600 dark:text-gray-300">
-              When evidence is submitted, it’ll show up here for approval.
-            </div>
-          </div>
-        ) : (
-          <div className="overflow-x-auto rounded-lg border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900">
-            <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-800">
-              <thead className="bg-gray-50 dark:bg-gray-950">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Control</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Source</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Reference</th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-200 dark:divide-gray-800">
-                {items.map((i) => (
-                  <tr key={i.id}>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
-                      {controlsById.get(i.controlId) || i.controlId}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-gray-300">{i.source}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-gray-300">{i.reference || '—'}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm">
-                      <div className="inline-flex items-center gap-2">
-                        <button
-                          onClick={() => void approve(i.id)}
-                          className="rounded-md bg-green-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-green-700"
-                        >
-                          Approve
-                        </button>
-                        <button
-                          onClick={() => void reject(i.id)}
-                          className="rounded-md border border-gray-300 dark:border-gray-800 bg-white dark:bg-gray-900 px-3 py-1.5 text-xs font-semibold text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800"
-                        >
-                          Reject
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+        <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <MetricCard title="Waiting review" value={items.length} hint="Submitted evidence" />
+          <MetricCard title="Controls affected" value={new Set(items.map((item) => item.controlId)).size} hint="Distinct controls" />
+          <MetricCard title="Review role" value={canApprove ? 'Enabled' : 'Read only'} hint="Based on RBAC" />
+          <MetricCard title="Queue source" value="Evidence" hint="Control proof" />
+        </section>
+
+        <DataTable
+          rows={items}
+          columns={[
+            {
+              key: 'control',
+              header: 'Control',
+              render: (item) => (
+                <div>
+                  <div className="font-medium text-gray-900 dark:text-gray-100">
+                    {controlsById.get(item.controlId) || item.controlId}
+                  </div>
+                  <div className="mt-1 text-xs text-gray-500 dark:text-gray-400">{item.controlId}</div>
+                </div>
+              ),
+            },
+            { key: 'source', header: 'Source', render: (item) => item.source },
+            { key: 'status', header: 'Status', render: (item) => <StatusBadge value={item.status} /> },
+            { key: 'reference', header: 'Reference', render: (item) => item.reference || '-' },
+            { key: 'updated', header: 'Updated', render: (item) => new Date(item.updatedAt).toLocaleString() },
+            {
+              key: 'actions',
+              header: 'Actions',
+              align: 'right',
+              render: (item) =>
+                canApprove ? (
+                  <div className="flex items-center justify-end gap-2">
+                    <button
+                      type="button"
+                      onClick={() => void updateEvidence(item.id, 'APPROVED')}
+                      disabled={actionId === item.id}
+                      className="rounded-md bg-green-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-green-800 disabled:opacity-60"
+                    >
+                      Approve
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void updateEvidence(item.id, 'MISSING')}
+                      disabled={actionId === item.id}
+                      className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-60"
+                    >
+                      Reject
+                    </button>
+                  </div>
+                ) : (
+                  <span className="text-xs text-gray-500">Read only</span>
+                ),
+            },
+          ]}
+          empty={<EmptyState title="Nothing to review" message="Submitted evidence will appear here for approval." />}
+        />
       </div>
     </AppLayout>
   );
 }
-

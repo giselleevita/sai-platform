@@ -1,17 +1,30 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import Link from 'next/link';
 import { api } from '@/lib/api';
 import { redirectToLoginIfNoSession } from '@/lib/auth';
-import { AppLayout } from '@/components/shared';
+import {
+  AppLayout,
+  DataTable,
+  EmptyState,
+  FormField,
+  LoadingSpinner,
+  MetricTile,
+  Modal,
+  PageHeader,
+  PermissionGate,
+  StatusBadge,
+  fieldClassName,
+  type DataTableColumn,
+} from '@/components/shared';
+import { useCurrentUser } from '@/hooks';
 
 interface Control {
   id: string;
   name: string;
   description?: string;
-  status: 'DRAFT' | 'ACTIVE' | 'UNDER_REVIEW' | 'RETIRED';
+  status: 'DRAFT' | 'ACTIVE' | 'UNDER_REVIEW' | 'RETIRED' | 'DEPRECATED';
   policyId?: string;
   ownerId?: string;
   approverId?: string;
@@ -20,401 +33,285 @@ interface Control {
   updatedAt: string;
 }
 
+const STATUSES = ['All', 'DRAFT', 'UNDER_REVIEW', 'ACTIVE', 'RETIRED', 'DEPRECATED'];
+const CONTROL_STATUSES = ['DRAFT', 'UNDER_REVIEW', 'ACTIVE', 'RETIRED', 'DEPRECATED'] as const;
+
 export default function ControlsPage() {
   const router = useRouter();
+  const { canCreate, canApprove, canDelete, isReadOnly } = useCurrentUser();
   const [loading, setLoading] = useState(true);
   const [controls, setControls] = useState<Control[]>([]);
   const [error, setError] = useState('');
-  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [statusFilter, setStatusFilter] = useState('All');
   const [editingControl, setEditingControl] = useState<Control | null>(null);
-  const [statusFilter, setStatusFilter] = useState<string>('All');
-
-  useEffect(() => {
-    loadControls();
-  }, []);
+  const [creating, setCreating] = useState(false);
 
   const loadControls = async () => {
     try {
       setLoading(true);
+      setError('');
       if (redirectToLoginIfNoSession(router)) return;
-
       const result = await api.get<Control[]>('/api/governance/controls');
-      if (result.success && result.data) {
-        setControls(result.data);
-      } else {
-        setError(result.error || 'Failed to load controls');
-      }
-    } catch (err) {
-      setError((err as any).message || 'Failed to load controls');
+      if (!result.success) throw new Error(result.error || 'Failed to load controls');
+      setControls(api.unwrapRows(result.data));
+    } catch (err: any) {
+      setError(err?.message || 'Failed to load controls');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleDelete = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this control?')) return;
+  useEffect(() => {
+    void loadControls();
+  }, []);
 
-    try {
-      const result = await api.delete(`/api/governance/controls/${id}`);
-      if (result.success) {
-        await loadControls();
-      } else {
-        alert(result.error || 'Failed to delete control');
-      }
-    } catch (err) {
-      alert('Failed to delete control');
+  const updateStatus = async (control: Control, status: Control['status']) => {
+    const result = await api.patch(`/api/governance/controls/${control.id}`, { status });
+    if (!result.success) {
+      setError(result.error || 'Failed to update control status');
+      return;
     }
+    await loadControls();
   };
 
-  const handleStatusChange = async (id: string, newStatus: Control['status']) => {
-    try {
-      const result = await api.patch(`/api/governance/controls/${id}`, { status: newStatus });
-      if (result.success) {
-        await loadControls();
-      } else {
-        alert(result.error || 'Failed to update control status');
-      }
-    } catch (err) {
-      alert('Failed to update control status');
+  const deleteControl = async (control: Control) => {
+    if (!confirm(`Delete control "${control.name}"?`)) return;
+    const result = await api.delete(`/api/governance/controls/${control.id}`);
+    if (!result.success) {
+      setError(result.error || 'Failed to delete control');
+      return;
     }
+    await loadControls();
   };
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'ACTIVE':
-        return 'bg-green-100 text-green-800';
-      case 'UNDER_REVIEW':
-        return 'bg-yellow-100 text-yellow-800';
-      case 'DRAFT':
-        return 'bg-gray-100 text-gray-800';
-      case 'RETIRED':
-        return 'bg-red-100 text-red-800';
-      default:
-        return 'bg-gray-100 text-gray-800';
-    }
-  };
+  const filteredControls = statusFilter === 'All' ? controls : controls.filter((control) => control.status === statusFilter);
+  const metrics = useMemo(
+    () => ({
+      active: controls.filter((control) => control.status === 'ACTIVE').length,
+      review: controls.filter((control) => control.status === 'UNDER_REVIEW').length,
+      draft: controls.filter((control) => control.status === 'DRAFT').length,
+    }),
+    [controls],
+  );
 
-  const filteredControls =
-    statusFilter === 'All'
-      ? controls
-      : controls.filter((c) => c.status === statusFilter);
+  const columns: DataTableColumn<Control>[] = [
+    {
+      key: 'name',
+      header: 'Control',
+      render: (control) => (
+        <div>
+          <div className="font-semibold text-gray-900 dark:text-gray-100">{control.name}</div>
+          <div className="mt-1 line-clamp-2 text-xs text-gray-500 dark:text-gray-400">{control.description || 'No description'}</div>
+        </div>
+      ),
+    },
+    { key: 'status', header: 'Status', render: (control) => <StatusBadge value={control.status} /> },
+    { key: 'owner', header: 'Owner', render: (control) => control.ownerId || 'Unassigned' },
+    { key: 'updated', header: 'Updated', render: (control) => new Date(control.updatedAt).toLocaleDateString() },
+    {
+      key: 'actions',
+      header: 'Actions',
+      align: 'right',
+      render: (control) => (
+        <div className="flex flex-wrap justify-end gap-2 text-xs font-semibold">
+          {control.status === 'DRAFT' && canCreate ? (
+            <button onClick={() => void updateStatus(control, 'UNDER_REVIEW')} className="text-amber-700 hover:underline">
+              Submit
+            </button>
+          ) : null}
+          {control.status === 'UNDER_REVIEW' && canApprove ? (
+            <button onClick={() => void updateStatus(control, 'ACTIVE')} className="text-green-700 hover:underline">
+              Approve
+            </button>
+          ) : null}
+          {control.status === 'ACTIVE' && canApprove ? (
+            <button onClick={() => void updateStatus(control, 'RETIRED')} className="text-red-700 hover:underline">
+              Retire
+            </button>
+          ) : null}
+          {!isReadOnly ? (
+            <button onClick={() => setEditingControl(control)} className="text-blue-700 hover:underline">
+              Edit
+            </button>
+          ) : (
+            <span className="text-gray-500">Read only</span>
+          )}
+          {canDelete ? (
+            <button onClick={() => void deleteControl(control)} className="text-red-700 hover:underline">
+              Delete
+            </button>
+          ) : null}
+        </div>
+      ),
+    },
+  ];
 
-  if (loading) {
+  if (loading && controls.length === 0) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
-      </div>
+      <AppLayout>
+        <LoadingSpinner />
+      </AppLayout>
     );
   }
 
   return (
     <AppLayout>
-      {/* Header */}
-      <div className="bg-white shadow">
-        <div className="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center">
-            <div>
-              <h1 className="text-3xl font-bold text-gray-900">Controls</h1>
-              <p className="mt-1 text-sm text-gray-600">
-                Manage security controls with lifecycle states and ownership
-              </p>
-            </div>
-            <div className="flex gap-4">
-              <button
-                onClick={() => setShowCreateModal(true)}
-                className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700"
-              >
-                Create Control
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Main content */}
-      <div className="max-w-7xl mx-auto py-12 px-4 sm:px-6 lg:px-8">
-        {error && (
-          <div className="mb-6 rounded-md bg-red-50 p-4">
-            <p className="text-sm font-medium text-red-800">{error}</p>
-          </div>
-        )}
-
-        {/* Status Filter */}
-        <div className="mb-6">
-          <div className="flex gap-2">
-            {['All', 'DRAFT', 'UNDER_REVIEW', 'ACTIVE', 'RETIRED'].map((status) => (
-              <button
-                key={status}
-                onClick={() => setStatusFilter(status)}
-                className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-                  statusFilter === status
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
-                }`}
-              >
-                {status.replace('_', ' ')}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Controls Table */}
-        {filteredControls.length === 0 ? (
-          <div className="text-center py-12 bg-white rounded-lg shadow">
-            <p className="text-gray-500 text-lg mb-4">No controls found</p>
-            <button
-              onClick={() => setShowCreateModal(true)}
-              className="text-blue-600 hover:text-blue-900 font-medium"
-            >
-              Create your first control
+      <PageHeader
+        title="Controls"
+        subtitle="Control registry with ownership, lifecycle state, and approval traceability."
+        right={
+          <PermissionGate allowed={canCreate}>
+            <button onClick={() => setCreating(true)} className="rounded-md bg-gray-900 px-3 py-2 text-sm font-semibold text-white hover:bg-gray-800">
+              Create control
             </button>
-          </div>
-        ) : (
-          <div className="bg-white shadow overflow-hidden sm:rounded-md">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Name
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Status
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Description
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Updated
-                  </th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Actions
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {filteredControls.map((control) => (
-                  <tr key={control.id} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm font-medium text-gray-900">{control.name}</div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span
-                        className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(
-                          control.status
-                        )}`}
-                      >
-                        {control.status.replace('_', ' ')}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="text-sm text-gray-500 line-clamp-2">
-                        {control.description || 'No description'}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {new Date(control.updatedAt).toLocaleDateString()}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                      <div className="flex items-center justify-end gap-2">
-                        {/* Lifecycle Actions */}
-                        {control.status === 'DRAFT' && (
-                          <button
-                            onClick={() => handleStatusChange(control.id, 'UNDER_REVIEW')}
-                            className="text-yellow-600 hover:text-yellow-900 text-xs"
-                            title="Submit for Review"
-                          >
-                            Submit
-                          </button>
-                        )}
-                        {control.status === 'UNDER_REVIEW' && (
-                          <>
-                            <button
-                              onClick={() => handleStatusChange(control.id, 'ACTIVE')}
-                              className="text-green-600 hover:text-green-900 text-xs"
-                              title="Approve"
-                            >
-                              Approve
-                            </button>
-                            <button
-                              onClick={() => handleStatusChange(control.id, 'DRAFT')}
-                              className="text-gray-600 hover:text-gray-900 text-xs"
-                              title="Reject"
-                            >
-                              Reject
-                            </button>
-                          </>
-                        )}
-                        {control.status === 'ACTIVE' && (
-                          <button
-                            onClick={() => handleStatusChange(control.id, 'RETIRED')}
-                            className="text-red-600 hover:text-red-900 text-xs"
-                            title="Retire"
-                          >
-                            Retire
-                          </button>
-                        )}
-                        <button
-                          onClick={() => setEditingControl(control)}
-                          className="text-blue-600 hover:text-blue-900"
-                        >
-                          Edit
-                        </button>
-                        <button
-                          onClick={() => handleDelete(control.id)}
-                          className="text-red-600 hover:text-red-900"
-                        >
-                          Delete
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
-
-      {/* Create/Edit Modal */}
-      {(showCreateModal || editingControl) && (
-        <ControlModal
-          control={editingControl}
-          onClose={() => {
-            setShowCreateModal(false);
-            setEditingControl(null);
-          }}
-          onSave={async () => {
-            await loadControls();
-            setShowCreateModal(false);
-            setEditingControl(null);
-          }}
+          </PermissionGate>
+        }
+      />
+      <div className="mx-auto max-w-7xl space-y-6 px-4 py-6 sm:px-6 lg:px-8">
+        {error ? <ErrorBanner message={error} onRetry={loadControls} /> : null}
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <MetricTile title="Total Controls" value={controls.length} hint="Tenant control registry" />
+          <MetricTile title="Active" value={metrics.active} hint="Approved and enforceable" />
+          <MetricTile title="Under Review" value={metrics.review} hint="Awaiting management sign-off" />
+          <MetricTile title="Draft" value={metrics.draft} hint="Not enforceable yet" />
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {STATUSES.map((status) => (
+            <button
+              key={status}
+              onClick={() => setStatusFilter(status)}
+              className={[
+                'rounded-md border px-3 py-2 text-sm font-semibold',
+                statusFilter === status
+                  ? 'border-gray-900 bg-gray-900 text-white'
+                  : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200',
+              ].join(' ')}
+            >
+              {status.replaceAll('_', ' ')}
+            </button>
+          ))}
+        </div>
+        <DataTable
+          columns={columns}
+          rows={filteredControls}
+          empty={
+            <EmptyState
+              title="No controls found"
+              message="Create controls to define expected organizational behavior and evidence requirements."
+              action={
+                canCreate ? (
+                  <button onClick={() => setCreating(true)} className="rounded-md bg-gray-900 px-4 py-2 text-sm font-semibold text-white">
+                    Create first control
+                  </button>
+                ) : null
+              }
+            />
+          }
         />
-      )}
+      </div>
+      <ControlModal
+        open={creating || Boolean(editingControl)}
+        control={editingControl}
+        onClose={() => {
+          setCreating(false);
+          setEditingControl(null);
+        }}
+        onSaved={async () => {
+          setCreating(false);
+          setEditingControl(null);
+          await loadControls();
+        }}
+      />
     </AppLayout>
   );
 }
 
-function ControlModal({
-  control,
-  onClose,
-  onSave,
-}: {
-  control: Control | null;
-  onClose: () => void;
-  onSave: () => void;
-}) {
-  const [formData, setFormData] = useState({
-    name: control?.name || '',
-    description: control?.description || '',
-    status: control?.status || 'DRAFT',
-    policyId: control?.policyId || '',
-  });
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError('');
-    setLoading(true);
-
-    try {
-      if (!formData.name.trim()) {
-        setError('Name is required');
-        setLoading(false);
-        return;
-      }
-
-      let result;
-      if (control) {
-        result = await api.patch(`/api/governance/controls/${control.id}`, formData);
-      } else {
-        result = await api.post('/api/governance/controls', formData);
-      }
-
-      if (result.success) {
-        onSave();
-      } else {
-        setError(result.error || 'Failed to save control');
-      }
-    } catch (err) {
-      setError('Failed to save control');
-    } finally {
-      setLoading(false);
-    }
-  };
-
+function ErrorBanner({ message, onRetry }: { message: string; onRetry: () => void }) {
   return (
-    <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
-      <div className="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
-        <div className="mt-3">
-          <h3 className="text-lg font-medium text-gray-900 mb-4">
-            {control ? 'Edit Control' : 'Create Control'}
-          </h3>
-
-          {error && (
-            <div className="mb-4 rounded-md bg-red-50 p-3">
-              <p className="text-sm text-red-800">{error}</p>
-            </div>
-          )}
-
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700">Name *</label>
-              <input
-                type="text"
-                required
-                value={formData.name}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-blue-500"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700">Description</label>
-              <textarea
-                value={formData.description}
-                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                rows={4}
-                className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-blue-500"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700">Status</label>
-              <select
-                value={formData.status}
-                onChange={(e) =>
-                  setFormData({ ...formData, status: e.target.value as Control['status'] })
-                }
-                className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-blue-500"
-              >
-                <option value="DRAFT">Draft</option>
-                <option value="UNDER_REVIEW">Under Review</option>
-                <option value="ACTIVE">Active</option>
-                <option value="RETIRED">Retired</option>
-              </select>
-            </div>
-
-            <div className="flex justify-end gap-3 pt-4">
-              <button
-                type="button"
-                onClick={onClose}
-                className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                disabled={loading}
-                className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50"
-              >
-                {loading ? 'Saving...' : control ? 'Update' : 'Create'}
-              </button>
-            </div>
-          </form>
-        </div>
+    <div className="rounded-md border border-red-200 bg-red-50 p-4 text-sm text-red-800 dark:border-red-900 dark:bg-red-950 dark:text-red-200">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <span>{message}</span>
+        <button onClick={onRetry} className="font-semibold underline">
+          Retry
+        </button>
       </div>
     </div>
   );
 }
 
+function ControlModal(props: {
+  open: boolean;
+  control: Control | null;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const [formData, setFormData] = useState({
+    name: props.control?.name || '',
+    description: props.control?.description || '',
+    status: props.control?.status || 'DRAFT',
+  });
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    setFormData({
+      name: props.control?.name || '',
+      description: props.control?.description || '',
+      status: props.control?.status || 'DRAFT',
+    });
+  }, [props.control, props.open]);
+
+  const submit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setSaving(true);
+    setError('');
+    const payload = { ...formData, name: formData.name.trim(), description: formData.description.trim() || undefined };
+    const result = props.control
+      ? await api.patch(`/api/governance/controls/${props.control.id}`, payload)
+      : await api.post('/api/governance/controls', payload);
+    setSaving(false);
+    if (!result.success) {
+      setError(result.error || 'Failed to save control');
+      return;
+    }
+    props.onSaved();
+  };
+
+  return (
+    <Modal open={props.open} title={props.control ? 'Edit control' : 'Create control'} onClose={props.onClose}>
+      <form onSubmit={submit} className="space-y-4">
+        {error ? <p className="rounded-md bg-red-50 p-3 text-sm text-red-800">{error}</p> : null}
+        <FormField label="Name" htmlFor="control-name" required>
+          <input id="control-name" className={fieldClassName} value={formData.name} onChange={(event) => setFormData({ ...formData, name: event.target.value })} required />
+        </FormField>
+        <FormField label="Description" htmlFor="control-description">
+          <textarea id="control-description" className={fieldClassName} rows={4} value={formData.description} onChange={(event) => setFormData({ ...formData, description: event.target.value })} />
+        </FormField>
+        <FormField label="Lifecycle status" htmlFor="control-status">
+          <select
+            id="control-status"
+            className={fieldClassName}
+            value={formData.status}
+            onChange={(event) =>
+              setFormData({ ...formData, status: event.target.value as Control['status'] })
+            }
+          >
+            {CONTROL_STATUSES.map((status) => (
+              <option key={status} value={status}>
+                {status.replaceAll('_', ' ')}
+              </option>
+            ))}
+          </select>
+        </FormField>
+        <div className="flex justify-end gap-2">
+          <button type="button" onClick={props.onClose} className="rounded-md border border-gray-300 px-4 py-2 text-sm font-semibold text-gray-700">
+            Cancel
+          </button>
+          <button disabled={saving} className="rounded-md bg-gray-900 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">
+            {saving ? 'Saving...' : 'Save control'}
+          </button>
+        </div>
+      </form>
+    </Modal>
+  );
+}

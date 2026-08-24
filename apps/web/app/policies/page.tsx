@@ -2,10 +2,10 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import Link from 'next/link';
 import { api } from '@/lib/api';
 import { redirectToLoginIfNoSession } from '@/lib/auth';
-import { AppLayout } from '@/components/shared';
+import { AppLayout, LoadingSpinner, PageHeader } from '@/components/shared';
+import { useCurrentUser } from '@/hooks';
 
 interface Policy {
   id: string;
@@ -26,6 +26,7 @@ export default function PoliciesPage() {
   const [error, setError] = useState('');
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [editingPolicy, setEditingPolicy] = useState<Policy | null>(null);
+  const { canCreate, canDelete, isReadOnly } = useCurrentUser();
 
   useEffect(() => {
     loadPolicies();
@@ -81,35 +82,32 @@ export default function PoliciesPage() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
-      </div>
+      <AppLayout>
+        <LoadingSpinner />
+      </AppLayout>
     );
   }
 
   return (
     <AppLayout>
-      {/* Header */}
-      <div className="bg-white shadow">
-        <div className="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center">
-            <div>
-              <h1 className="text-3xl font-bold text-gray-900">Policies</h1>
-              <p className="mt-1 text-sm text-gray-600">
-                Manage governance policies with lifecycle states
-              </p>
-            </div>
-            <div className="flex gap-4">
-              <button
-                onClick={() => setShowCreateModal(true)}
-                className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700"
-              >
-                Create Policy
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
+      <PageHeader
+        title="Policies"
+        subtitle="Manage governance policies with lifecycle states."
+        right={
+          canCreate ? (
+            <button
+              onClick={() => setShowCreateModal(true)}
+              className="inline-flex items-center rounded-md bg-gray-900 px-3 py-2 text-sm font-semibold text-white hover:bg-gray-800"
+            >
+              Create policy
+            </button>
+          ) : (
+            <span className="rounded-md border border-gray-300 bg-gray-50 px-3 py-2 text-sm font-medium text-gray-600">
+              Read-only role
+            </span>
+          )
+        }
+      />
 
       {/* Main content */}
       <div className="max-w-7xl mx-auto py-12 px-4 sm:px-6 lg:px-8">
@@ -123,12 +121,14 @@ export default function PoliciesPage() {
         {policies.length === 0 ? (
           <div className="text-center py-12 bg-white rounded-lg shadow">
             <p className="text-gray-500 text-lg mb-4">No policies found</p>
-            <button
-              onClick={() => setShowCreateModal(true)}
-              className="text-blue-600 hover:text-blue-900 font-medium"
-            >
-              Create your first policy
-            </button>
+            {canCreate && (
+              <button
+                onClick={() => setShowCreateModal(true)}
+                className="text-blue-600 hover:text-blue-900 font-medium"
+              >
+                Create your first policy
+              </button>
+            )}
           </div>
         ) : (
           <div className="bg-white shadow overflow-hidden sm:rounded-md">
@@ -176,18 +176,23 @@ export default function PoliciesPage() {
                       {new Date(policy.updatedAt).toLocaleDateString()}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                      <button
-                        onClick={() => setEditingPolicy(policy)}
-                        className="text-blue-600 hover:text-blue-900 mr-4"
-                      >
-                        Edit
-                      </button>
-                      <button
-                        onClick={() => handleDelete(policy.id)}
-                        className="text-red-600 hover:text-red-900"
-                      >
-                        Delete
-                      </button>
+                      {!isReadOnly && (
+                        <button
+                          onClick={() => setEditingPolicy(policy)}
+                          className="text-blue-600 hover:text-blue-900 mr-4"
+                        >
+                          Edit
+                        </button>
+                      )}
+                      {canDelete && (
+                        <button
+                          onClick={() => handleDelete(policy.id)}
+                          className="text-red-600 hover:text-red-900"
+                        >
+                          Delete
+                        </button>
+                      )}
+                      {isReadOnly && <span className="text-xs text-gray-500">Read only</span>}
                     </td>
                   </tr>
                 ))}

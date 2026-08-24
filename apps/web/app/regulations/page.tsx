@@ -2,10 +2,10 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import Link from 'next/link';
 import { api } from '@/lib/api';
 import { redirectToLoginIfNoSession } from '@/lib/auth';
-import { AppLayout } from '@/components/shared';
+import { AppLayout, LoadingSpinner, PageHeader } from '@/components/shared';
+import { useCurrentUser } from '@/hooks';
 
 interface Regulation {
   id: string;
@@ -25,6 +25,7 @@ export default function RegulationsPage() {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [editingRegulation, setEditingRegulation] = useState<Regulation | null>(null);
   const [frameworkFilter, setFrameworkFilter] = useState<string>('All');
+  const { canCreate, canDelete, isReadOnly } = useCurrentUser();
 
   useEffect(() => {
     loadRegulations();
@@ -71,35 +72,32 @@ export default function RegulationsPage() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
-      </div>
+      <AppLayout>
+        <LoadingSpinner />
+      </AppLayout>
     );
   }
 
   return (
     <AppLayout>
-      {/* Header */}
-      <div className="bg-white shadow">
-        <div className="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center">
-            <div>
-              <h1 className="text-3xl font-bold text-gray-900">Regulations</h1>
-              <p className="mt-1 text-sm text-gray-600">
-                Track regulatory obligations and map them to controls
-              </p>
-            </div>
-            <div className="flex gap-4">
-              <button
-                onClick={() => setShowCreateModal(true)}
-                className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700"
-              >
-                Create Regulation
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
+      <PageHeader
+        title="Regulations"
+        subtitle="Track regulatory obligations and map them to controls."
+        right={
+          canCreate ? (
+            <button
+              onClick={() => setShowCreateModal(true)}
+              className="inline-flex items-center rounded-md bg-gray-900 px-3 py-2 text-sm font-semibold text-white hover:bg-gray-800"
+            >
+              Create regulation
+            </button>
+          ) : (
+            <span className="rounded-md border border-gray-300 bg-gray-50 px-3 py-2 text-sm font-medium text-gray-600">
+              Read-only role
+            </span>
+          )
+        }
+      />
 
       {/* Main content */}
       <div className="max-w-7xl mx-auto py-12 px-4 sm:px-6 lg:px-8">
@@ -132,12 +130,14 @@ export default function RegulationsPage() {
         {filteredRegulations.length === 0 ? (
           <div className="text-center py-12 bg-white rounded-lg shadow">
             <p className="text-gray-500 text-lg mb-4">No regulations found</p>
-            <button
-              onClick={() => setShowCreateModal(true)}
-              className="text-blue-600 hover:text-blue-900 font-medium"
-            >
-              Create your first regulation
-            </button>
+            {canCreate && (
+              <button
+                onClick={() => setShowCreateModal(true)}
+                className="text-blue-600 hover:text-blue-900 font-medium"
+              >
+                Create your first regulation
+              </button>
+            )}
           </div>
         ) : (
           <div className="grid gap-4">
@@ -167,18 +167,23 @@ export default function RegulationsPage() {
                     </p>
                   </div>
                   <div className="flex gap-2 ml-4">
-                    <button
-                      onClick={() => setEditingRegulation(regulation)}
-                      className="text-blue-600 hover:text-blue-900 text-sm font-medium"
-                    >
-                      Edit
-                    </button>
-                    <button
-                      onClick={() => handleDelete(regulation.id)}
-                      className="text-red-600 hover:text-red-900 text-sm font-medium"
-                    >
-                      Delete
-                    </button>
+                    {!isReadOnly && (
+                      <button
+                        onClick={() => setEditingRegulation(regulation)}
+                        className="text-blue-600 hover:text-blue-900 text-sm font-medium"
+                      >
+                        Edit
+                      </button>
+                    )}
+                    {canDelete && (
+                      <button
+                        onClick={() => handleDelete(regulation.id)}
+                        className="text-red-600 hover:text-red-900 text-sm font-medium"
+                      >
+                        Delete
+                      </button>
+                    )}
+                    {isReadOnly && <span className="text-xs text-gray-500">Read only</span>}
                   </div>
                 </div>
               </div>

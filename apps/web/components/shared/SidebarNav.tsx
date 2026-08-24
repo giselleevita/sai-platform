@@ -18,7 +18,7 @@ type CompanyOption = {
 type NavItem = {
   name: string;
   href: string;
-  icon?: string;
+  short: string;
 };
 
 type NavGroup = {
@@ -47,27 +47,36 @@ export function SidebarNav(props: {
   const navGroups: NavGroup[] = useMemo(
     () => [
       {
-        name: 'Overview',
-        items: [{ name: 'Overview', href: '/dashboard', icon: '◻︎' }],
+        name: 'Command',
+        items: [{ name: 'Dashboard', href: '/dashboard', short: 'DB' }],
       },
       {
-        name: 'Risk & controls',
+        name: 'Governance',
         items: [
-          { name: 'Inventory', href: '/inventory', icon: '◻︎' },
-          { name: 'Risks', href: '/risks', icon: '◻︎' },
-          { name: 'Compliance', href: '/compliance', icon: '◻︎' },
+          { name: 'Inventory', href: '/inventory', short: 'IN' },
+          { name: 'Governance', href: '/governance', short: 'GV' },
+          { name: 'Controls', href: '/controls', short: 'CT' },
+          { name: 'Risks', href: '/risks', short: 'RK' },
+          { name: 'Evidence', href: '/evidence', short: 'EV' },
+          { name: 'Incidents', href: '/incidents', short: 'IR' },
         ],
       },
       {
-        name: 'Integrations',
+        name: 'Assurance',
         items: [
-          { name: 'Evidentia', href: '/integrations/evidentia', icon: '◻︎' },
-          { name: 'Webhooks', href: '/webhooks', icon: '◻︎' },
+          { name: 'Audit Log', href: '/audit', short: 'AU' },
+          { name: 'Reports', href: '/reports', short: 'RP' },
+          { name: 'Compliance', href: '/compliance', short: 'CP' },
+          { name: 'Review Queue', href: '/review-queue', short: 'RQ' },
         ],
       },
       {
         name: 'Settings',
-        items: [{ name: 'Plan & usage', href: '/plan', icon: '◻︎' }],
+        items: [
+          { name: 'Integrations', href: '/integrations/evidentia', short: 'IG' },
+          { name: 'Webhooks', href: '/webhooks', short: 'WH' },
+          { name: 'Plan & usage', href: '/plan', short: 'PL' },
+        ],
       },
     ],
     [],
@@ -117,22 +126,22 @@ export function SidebarNav(props: {
     <div className="flex h-full flex-col bg-white dark:bg-gray-900">
       <div className="flex items-center justify-between gap-2 border-b border-gray-200 dark:border-gray-800 px-3 py-3">
         <Link href="/dashboard" className="flex items-center gap-2">
-          <span className="h-8 w-8 rounded-md bg-blue-600 text-white flex items-center justify-center text-sm font-bold">
+          <span className="flex h-8 w-8 items-center justify-center rounded-md bg-gray-900 text-sm font-bold text-white dark:bg-gray-100 dark:text-gray-900">
             SAI
           </span>
           {!props.collapsed && (
-            <span className="text-sm font-semibold text-gray-900 dark:text-gray-100">SAI Platform</span>
+            <span className="text-sm font-semibold text-gray-900 dark:text-gray-100">Governance Console</span>
           )}
         </Link>
         <div className="flex items-center gap-2">
           <button
             type="button"
             onClick={props.onToggleCollapsed}
-            className="hidden md:inline-flex rounded-md px-2 py-1 text-xs font-medium text-gray-600 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-800"
+            className="hidden rounded-md px-2 py-1 text-xs font-medium text-gray-600 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-800 md:inline-flex"
             aria-label={props.collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
             title={props.collapsed ? 'Expand' : 'Collapse'}
           >
-            {props.collapsed ? '»' : '«'}
+            {props.collapsed ? '>>' : '<<'}
           </button>
           <button
             type="button"
@@ -140,7 +149,7 @@ export function SidebarNav(props: {
             className="md:hidden rounded-md px-2 py-1 text-sm text-gray-600 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-800"
             aria-label="Close sidebar"
           >
-            ✕
+            X
           </button>
         </div>
       </div>
@@ -164,11 +173,20 @@ export function SidebarNav(props: {
                     className={[
                       'flex items-center gap-2 rounded-md px-2 py-2 text-sm transition-colors',
                       active
-                        ? 'bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-200'
+                        ? 'bg-gray-900 text-white dark:bg-gray-100 dark:text-gray-950'
                         : 'text-gray-700 hover:bg-gray-50 dark:text-gray-200 dark:hover:bg-gray-800',
                     ].join(' ')}
                   >
-                    <span className="w-5 text-center text-xs text-gray-500 dark:text-gray-400">{item.icon}</span>
+                    <span
+                      className={[
+                        'flex h-6 w-7 items-center justify-center rounded border text-[10px] font-semibold',
+                        active
+                          ? 'border-white/20 bg-white/10 text-white dark:border-gray-900/20 dark:bg-gray-900/10 dark:text-gray-950'
+                          : 'border-gray-200 bg-gray-50 text-gray-500 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-400',
+                      ].join(' ')}
+                    >
+                      {item.short}
+                    </span>
                     {!props.collapsed && <span className="truncate">{item.name}</span>}
                   </Link>
                 );
@@ -251,4 +269,3 @@ export function SidebarNav(props: {
     </>
   );
 }
-

@@ -2,7 +2,8 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { AppLayout, MetricCard, PageHeader } from '@/components/shared';
+import { AppLayout, DataTable, EmptyState, LoadingSpinner, MetricCard, PageHeader, StatusBadge } from '@/components/shared';
+import { useCurrentUser } from '@/hooks';
 import { api } from '@/lib/api';
 
 type ApiComplianceSnapshot = {
@@ -22,6 +23,7 @@ export default function CompliancePage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [rows, setRows] = useState<ApiComplianceSnapshot[]>([]);
+  const { canApprove } = useCurrentUser();
 
   const latest = useMemo(() => rows[0] ?? null, [rows]);
   const evidenceByStatus = useMemo(() => latest?.summary?.evidenceByStatus || {}, [latest]);
@@ -45,7 +47,7 @@ export default function CompliancePage() {
   const captureSnapshot = async () => {
     setError('');
     setLoading(true);
-    const res = await api.post('/api/governance/capture-snapshot', {});
+    const res = await api.post('/api/governance/compliance-snapshots', {});
     if (!res.success) setError(res.error || 'Failed to capture snapshot');
     const next = await api.get<ApiComplianceSnapshot[]>('/api/governance/compliance-snapshots');
     if (next.success) setRows(Array.isArray(next.data) ? next.data : []);
@@ -121,7 +123,8 @@ export default function CompliancePage() {
               type="button"
               onClick={() => void captureSnapshot()}
               className="rounded-md bg-blue-600 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-700"
-              disabled={loading}
+              disabled={loading || !canApprove}
+              title={canApprove ? 'Capture snapshot' : 'Management or Admin required'}
             >
               Capture snapshot
             </button>
@@ -155,6 +158,8 @@ export default function CompliancePage() {
           <div className="rounded-md bg-red-50 border border-red-200 p-4 text-sm text-red-800">{error}</div>
         ) : null}
 
+        {loading ? <LoadingSpinner /> : null}
+
         <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
           <MetricCard title="Policies" value={latest?.summary?.policies ?? '—'} />
           <MetricCard title="Controls" value={latest?.summary?.controls ?? '—'} />
@@ -182,48 +187,31 @@ export default function CompliancePage() {
               Go to evidence →
             </Link>
           </div>
-          <div className="mt-3 overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-800">
-              <thead className="bg-gray-50 dark:bg-gray-950">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Created
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Evidence
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Risks
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="bg-white dark:bg-gray-900 divide-y divide-gray-200 dark:divide-gray-800">
-                {rows.map((r) => (
-                  <tr key={r.id}>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700 dark:text-gray-200">
-                      {new Date(r.createdAt).toLocaleString()}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-gray-300">
-                      {r.summary?.evidenceTotal ?? '—'}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-gray-300">
-                      {r.summary?.risks ?? '—'}
-                    </td>
-                  </tr>
-                ))}
-                {rows.length === 0 ? (
-                  <tr>
-                    <td className="px-6 py-8 text-sm text-gray-600 dark:text-gray-300" colSpan={3}>
-                      No snapshots yet. Capture your first snapshot to start an audit trail.
-                    </td>
-                  </tr>
-                ) : null}
-              </tbody>
-            </table>
+          <div className="mt-3">
+            <DataTable
+              rows={rows}
+              columns={[
+                { key: 'created', header: 'Created', render: (row) => new Date(row.createdAt).toLocaleString() },
+                { key: 'evidence', header: 'Evidence', render: (row) => row.summary?.evidenceTotal ?? '-' },
+                { key: 'risks', header: 'Risks', render: (row) => row.summary?.risks ?? '-' },
+                { key: 'controls', header: 'Controls', render: (row) => row.summary?.controls ?? '-' },
+                {
+                  key: 'coverage',
+                  header: 'Evidence Status',
+                  render: (row) => (
+                    <div className="flex flex-wrap gap-1">
+                      {Object.entries(row.summary?.evidenceByStatus || {}).map(([status, count]) => (
+                        <StatusBadge key={status} value={`${status}: ${count}`} />
+                      ))}
+                    </div>
+                  ),
+                },
+              ]}
+              empty={<EmptyState title="No snapshots yet" message="Capture a snapshot to create a point-in-time audit trail." />}
+            />
           </div>
         </section>
       </div>
     </AppLayout>
   );
 }
-

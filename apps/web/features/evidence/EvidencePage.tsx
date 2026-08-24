@@ -1,18 +1,31 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import Link from 'next/link';
 import { api } from '@/lib/api';
-import { redirectToLoginIfNoSession } from '@/lib/auth';
-import { AppLayout, PageHeader } from '@/components/shared';
+import { getCsrfToken, redirectToLoginIfNoSession } from '@/lib/auth';
+import {
+  AppLayout,
+  DataTable,
+  EmptyState,
+  FormField,
+  LoadingSpinner,
+  MetricTile,
+  Modal,
+  PageHeader,
+  PermissionGate,
+  StatusBadge,
+  fieldClassName,
+  type DataTableColumn,
+} from '@/components/shared';
+import { useCurrentUser } from '@/hooks';
 
 interface Evidence {
   id: string;
   controlId: string;
   control?: { id: string; name: string };
   source: string;
-  status: 'MISSING' | 'SUBMITTED' | 'APPROVED' | 'EXPIRED';
+  status: 'PENDING' | 'REJECTED' | 'MISSING' | 'SUBMITTED' | 'APPROVED' | 'EXPIRED';
   validFrom?: string;
   validTo?: string;
   reference?: string;
@@ -32,167 +45,180 @@ type EvidenceAttachment = {
   sizeBytes: number;
   sha256: string;
   createdAt: string;
-  createdById?: string | null;
 };
+
+const STATUSES = ['All', 'MISSING', 'SUBMITTED', 'APPROVED', 'EXPIRED', 'PENDING', 'REJECTED'];
+const EVIDENCE_STATUSES = ['MISSING', 'SUBMITTED', 'APPROVED', 'EXPIRED', 'PENDING', 'REJECTED'] as const;
 
 export default function EvidencePage() {
   const router = useRouter();
+  const { canCreate, canApprove, canDelete, isReadOnly } = useCurrentUser();
   const [loading, setLoading] = useState(true);
   const [evidence, setEvidence] = useState<Evidence[]>([]);
   const [controls, setControls] = useState<Control[]>([]);
   const [error, setError] = useState('');
-  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [statusFilter, setStatusFilter] = useState('All');
+  const [creating, setCreating] = useState(false);
   const [editingEvidence, setEditingEvidence] = useState<Evidence | null>(null);
-  const [statusFilter, setStatusFilter] = useState<string>('All');
-  const [attachmentsByEvidenceId, setAttachmentsByEvidenceId] = useState<Record<string, EvidenceAttachment[]>>({});
-  const [expandedEvidenceId, setExpandedEvidenceId] = useState<string | null>(null);
-  const [uploadingEvidenceId, setUploadingEvidenceId] = useState<string | null>(null);
-
-  useEffect(() => {
-    void loadData();
-  }, []);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [attachments, setAttachments] = useState<Record<string, EvidenceAttachment[]>>({});
+  const [uploadingId, setUploadingId] = useState<string | null>(null);
 
   const loadData = async () => {
     try {
       setLoading(true);
+      setError('');
       if (redirectToLoginIfNoSession(router)) return;
-
       const [evidenceResult, controlsResult] = await Promise.all([
         api.get<Evidence[]>('/api/evidence'),
         api.get<Control[]>('/api/governance/controls'),
       ]);
-
-      if (evidenceResult.success && evidenceResult.data) {
-        setEvidence(evidenceResult.data);
-      } else {
-        setError(evidenceResult.error || 'Failed to load evidence');
-      }
-
-      if (controlsResult.success && controlsResult.data) {
-        setControls(controlsResult.data);
-      }
-    } catch (err) {
-      setError((err as any).message || 'Failed to load evidence');
+      if (!evidenceResult.success) throw new Error(evidenceResult.error || 'Failed to load evidence');
+      setEvidence(api.unwrapRows(evidenceResult.data));
+      if (controlsResult.success) setControls(api.unwrapRows(controlsResult.data));
+    } catch (err: any) {
+      setError(err?.message || 'Failed to load evidence');
     } finally {
       setLoading(false);
     }
   };
 
+  useEffect(() => {
+    void loadData();
+  }, []);
+
+  const isExpired = (item: Evidence) => item.validTo ? new Date(item.validTo) < new Date() : false;
+  const effectiveStatus = (item: Evidence) => (item.status === 'APPROVED' && isExpired(item) ? 'EXPIRED' : item.status);
+  const filteredEvidence = statusFilter === 'All' ? evidence : evidence.filter((item) => effectiveStatus(item) === statusFilter);
+
+  const metrics = useMemo(
+    () => ({
+      approved: evidence.filter((item) => effectiveStatus(item) === 'APPROVED').length,
+      missing: evidence.filter((item) => ['MISSING', 'EXPIRED'].includes(effectiveStatus(item))).length,
+      submitted: evidence.filter((item) => effectiveStatus(item) === 'SUBMITTED').length,
+    }),
+    [evidence],
+  );
+
   const loadAttachments = async (evidenceId: string) => {
-    const res = await api.get<EvidenceAttachment[]>(`/api/evidence/${evidenceId}/attachments`);
-    if (!res.success) {
-      setError(res.error || 'Failed to load attachments');
+    const result = await api.get<EvidenceAttachment[]>(`/api/evidence/${evidenceId}/attachments`);
+    if (!result.success) {
+      setError(result.error || 'Failed to load attachments');
       return;
     }
-    setAttachmentsByEvidenceId((prev) => ({ ...prev, [evidenceId]: Array.isArray(res.data) ? res.data : [] }));
+    setAttachments((current) => ({ ...current, [evidenceId]: api.unwrapRows(result.data) }));
   };
 
   const toggleAttachments = async (evidenceId: string) => {
-    const next = expandedEvidenceId === evidenceId ? null : evidenceId;
-    setExpandedEvidenceId(next);
-    if (next) {
-      await loadAttachments(evidenceId);
+    const nextId = expandedId === evidenceId ? null : evidenceId;
+    setExpandedId(nextId);
+    if (nextId && !attachments[nextId]) await loadAttachments(nextId);
+  };
+
+  const updateStatus = async (item: Evidence, status: Evidence['status']) => {
+    const result = await api.patch(`/api/evidence/${item.id}`, { status });
+    if (!result.success) {
+      setError(result.error || 'Failed to update evidence status');
+      return;
     }
+    await loadData();
+  };
+
+  const deleteEvidence = async (item: Evidence) => {
+    if (!confirm(`Delete evidence from "${item.source}"?`)) return;
+    const result = await api.delete(`/api/evidence/${item.id}`);
+    if (!result.success) {
+      setError(result.error || 'Failed to delete evidence');
+      return;
+    }
+    await loadData();
   };
 
   const uploadAttachment = async (evidenceId: string, file: File) => {
-    setUploadingEvidenceId(evidenceId);
+    setUploadingId(evidenceId);
+    setError('');
     try {
       const form = new FormData();
       form.append('file', file);
       const response = await fetch(`/api/evidence/${evidenceId}/attachments`, {
         method: 'POST',
         credentials: 'include',
+        headers: { ...(getCsrfToken() ? { 'X-CSRF-Token': getCsrfToken() || '' } : {}) },
         body: form,
       });
-      const data = await response.json().catch(() => null);
-      if (!response.ok) {
-        setError(data?.error || `Upload failed with status ${response.status}`);
-        return;
-      }
+      if (!response.ok) throw new Error(`Upload failed with status ${response.status}`);
       await loadAttachments(evidenceId);
-    } catch (e: any) {
-      setError(e?.message || 'Upload failed');
+    } catch (err: any) {
+      setError(err?.message || 'Upload failed');
     } finally {
-      setUploadingEvidenceId(null);
+      setUploadingId(null);
     }
   };
 
-  const deleteAttachment = async (evidenceId: string, attachmentId: string) => {
-    if (!confirm('Delete this attachment?')) return;
-    const res = await api.delete(`/api/evidence/attachments/${attachmentId}`);
-    if (!res.success) {
-      setError(res.error || 'Failed to delete attachment');
-      return;
-    }
-    await loadAttachments(evidenceId);
-  };
+  const columns: DataTableColumn<Evidence>[] = [
+    {
+      key: 'control',
+      header: 'Control / Evidence',
+      render: (item) => (
+        <div>
+          <div className="font-semibold text-gray-900 dark:text-gray-100">{item.control?.name || controls.find((control) => control.id === item.controlId)?.name || item.controlId}</div>
+          <div className="mt-1 text-xs text-gray-500 dark:text-gray-400">{item.source}</div>
+        </div>
+      ),
+    },
+    { key: 'status', header: 'Status', render: (item) => <StatusBadge value={effectiveStatus(item)} /> },
+    {
+      key: 'validity',
+      header: 'Validity',
+      render: (item) => (
+        <div className="text-sm">
+          <div>{item.validFrom ? new Date(item.validFrom).toLocaleDateString() : 'No start date'}</div>
+          <div className="text-xs text-gray-500 dark:text-gray-400">{item.validTo ? `Until ${new Date(item.validTo).toLocaleDateString()}` : 'No expiry'}</div>
+        </div>
+      ),
+    },
+    { key: 'reference', header: 'Reference', render: (item) => item.reference || 'No reference' },
+    {
+      key: 'actions',
+      header: 'Actions',
+      align: 'right',
+      render: (item) => (
+        <div className="flex flex-wrap justify-end gap-2 text-xs font-semibold">
+          <button onClick={() => void toggleAttachments(item.id)} className="text-gray-700 hover:underline dark:text-gray-200">
+            {expandedId === item.id ? 'Hide files' : 'Files'}
+          </button>
+          {canApprove && item.status !== 'APPROVED' ? (
+            <button onClick={() => void updateStatus(item, 'APPROVED')} className="text-green-700 hover:underline">
+              Approve
+            </button>
+          ) : null}
+          {canApprove && item.status !== 'REJECTED' ? (
+            <button onClick={() => void updateStatus(item, 'REJECTED')} className="text-red-700 hover:underline">
+              Reject
+            </button>
+          ) : null}
+          {!isReadOnly ? (
+            <button onClick={() => setEditingEvidence(item)} className="text-blue-700 hover:underline">
+              Edit
+            </button>
+          ) : (
+            <span className="text-gray-500">Read only</span>
+          )}
+          {canDelete ? (
+            <button onClick={() => void deleteEvidence(item)} className="text-red-700 hover:underline">
+              Delete
+            </button>
+          ) : null}
+        </div>
+      ),
+    },
+  ];
 
-  const handleDelete = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this evidence?')) return;
-
-    try {
-      const result = await api.delete(`/api/evidence/${id}`);
-      if (result.success) {
-        await loadData();
-      } else {
-        alert(result.error || 'Failed to delete evidence');
-      }
-    } catch (err) {
-      alert('Failed to delete evidence');
-    }
-  };
-
-  const handleStatusChange = async (id: string, newStatus: Evidence['status']) => {
-    try {
-      const result = await api.patch(`/api/evidence/${id}`, { status: newStatus });
-      if (result.success) {
-        await loadData();
-      } else {
-        alert(result.error || 'Failed to update evidence status');
-      }
-    } catch (err) {
-      alert('Failed to update evidence status');
-    }
-  };
-
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'APPROVED':
-        return 'bg-green-100 text-green-800';
-      case 'SUBMITTED':
-        return 'bg-yellow-100 text-yellow-800';
-      case 'EXPIRED':
-        return 'bg-red-100 text-red-800';
-      case 'MISSING':
-        return 'bg-gray-100 text-gray-800';
-      default:
-        return 'bg-gray-100 text-gray-800';
-    }
-  };
-
-  const getControlName = (controlId: string) => {
-    const control = controls.find((c) => c.id === controlId);
-    return control?.name || controlId;
-  };
-
-  const isExpired = (validTo?: string) => {
-    if (!validTo) return false;
-    return new Date(validTo) < new Date();
-  };
-
-  const filteredEvidence =
-    statusFilter === 'All'
-      ? evidence
-      : evidence.filter((e) => e.status === statusFilter || (statusFilter === 'EXPIRED' && isExpired(e.validTo)));
-  const hasAnyEvidence = evidence.length > 0;
-  const isFilteredView = statusFilter !== 'All';
-
-  if (loading) {
+  if (loading && evidence.length === 0) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
-      </div>
+      <AppLayout>
+        <LoadingSpinner />
+      </AppLayout>
     );
   }
 
@@ -200,461 +226,206 @@ export default function EvidencePage() {
     <AppLayout>
       <PageHeader
         title="Evidence"
-        subtitle="Attach proof to controls and prepare audit-ready exports."
+        subtitle="Govern proof coverage, validity windows, review state, and control linkage."
         right={
-          <button
-            onClick={() => setShowCreateModal(true)}
-            className="inline-flex items-center rounded-md bg-blue-600 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-700"
-          >
-            Add evidence
-          </button>
+          <PermissionGate allowed={canCreate}>
+            <button onClick={() => setCreating(true)} className="rounded-md bg-gray-900 px-3 py-2 text-sm font-semibold text-white hover:bg-gray-800">
+              Add evidence
+            </button>
+          </PermissionGate>
         }
       />
-
-      <div className="max-w-7xl mx-auto py-12 px-4 sm:px-6 lg:px-8">
-        {error && (
-          <div className="mb-6 rounded-md bg-red-50 p-4">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <p className="text-sm font-medium text-red-800">{error}</p>
-              <button
-                onClick={loadData}
-                className="inline-flex items-center rounded-md border border-red-200 bg-white px-3 py-1.5 text-xs font-medium text-red-700 hover:bg-red-50"
-              >
-                Retry
-              </button>
-            </div>
-          </div>
-        )}
-
-        <div className="mb-6">
-          <div className="flex gap-2">
-            {['All', 'MISSING', 'SUBMITTED', 'APPROVED', 'EXPIRED'].map((status) => (
-              <button
-                key={status}
-                onClick={() => setStatusFilter(status)}
-                className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-                  statusFilter === status
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
-                }`}
-              >
-                {status.replace('_', ' ')}
-              </button>
-            ))}
-          </div>
+      <div className="mx-auto max-w-7xl space-y-6 px-4 py-6 sm:px-6 lg:px-8">
+        {error ? <ErrorBanner message={error} onRetry={loadData} /> : null}
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <MetricTile title="Evidence Items" value={evidence.length} hint="Linked proof records" />
+          <MetricTile title="Approved" value={metrics.approved} hint="Auditor-ready proof" />
+          <MetricTile title="Missing / Expired" value={metrics.missing} hint="Coverage gaps" />
+          <MetricTile title="Submitted" value={metrics.submitted} hint="Pending approval" />
         </div>
-
-        {filteredEvidence.length === 0 ? (
-          <div className="text-center py-12 bg-white rounded-lg shadow">
-            <h3 className="text-lg font-semibold text-gray-900">
-              {isFilteredView && hasAnyEvidence
-                ? `No ${statusFilter.replace('_', ' ')} evidence entries`
-                : 'No evidence records yet'}
-            </h3>
-            <p className="mt-2 text-sm text-gray-500">
-              {isFilteredView && hasAnyEvidence
-                ? 'Try switching to another status filter to review existing evidence.'
-                : 'Add evidence to controls so reviews and expiry tracking can begin.'}
-            </p>
-            <div className="mt-5 flex flex-col items-center justify-center gap-3 sm:flex-row">
-              {isFilteredView && hasAnyEvidence ? (
-                <button
-                  onClick={() => setStatusFilter('All')}
-                  className="inline-flex items-center rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
-                >
-                  Show all evidence
-                </button>
+        <div className="flex flex-wrap gap-2">
+          {STATUSES.map((status) => (
+            <button
+              key={status}
+              onClick={() => setStatusFilter(status)}
+              className={[
+                'rounded-md border px-3 py-2 text-sm font-semibold',
+                statusFilter === status
+                  ? 'border-gray-900 bg-gray-900 text-white'
+                  : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200',
+              ].join(' ')}
+            >
+              {status.replaceAll('_', ' ')}
+            </button>
+          ))}
+        </div>
+        <DataTable
+          columns={columns}
+          rows={filteredEvidence}
+          empty={<EmptyState title="No evidence found" message="Attach evidence to controls to prove control operation and audit readiness." />}
+        />
+        {expandedId ? (
+          <div className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm dark:border-gray-800 dark:bg-gray-900">
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+              <h2 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Attachments</h2>
+              {canCreate ? (
+                <label className="cursor-pointer rounded-md border border-gray-300 px-3 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-200">
+                  {uploadingId === expandedId ? 'Uploading...' : 'Upload file'}
+                  <input type="file" className="hidden" disabled={uploadingId === expandedId} onChange={(event) => event.target.files?.[0] && void uploadAttachment(expandedId, event.target.files[0])} />
+                </label>
+              ) : null}
+            </div>
+            <div className="space-y-2">
+              {(attachments[expandedId] || []).length === 0 ? (
+                <p className="text-sm text-gray-500 dark:text-gray-400">No attachments uploaded.</p>
               ) : (
-                <>
-                  <button
-                    onClick={() => setShowCreateModal(true)}
-                    className="inline-flex items-center rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
-                  >
-                    Add your first evidence
-                  </button>
-                  <Link
-                    href="/controls"
-                    className="inline-flex items-center rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
-                  >
-                    Review controls
-                  </Link>
-                </>
+                attachments[expandedId].map((attachment) => (
+                  <div key={attachment.id} className="flex items-center justify-between rounded-md border border-gray-200 px-3 py-2 text-sm dark:border-gray-800">
+                    <span className="font-medium text-gray-900 dark:text-gray-100">{attachment.filename}</span>
+                    <span className="text-xs text-gray-500">{Math.ceil(attachment.sizeBytes / 1024)} KB</span>
+                  </div>
+                ))
               )}
             </div>
           </div>
-        ) : (
-          <div className="bg-white shadow overflow-hidden sm:rounded-md">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Control</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Source</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Valid From</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Valid To</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Attachments</th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {filteredEvidence.map((item) => {
-                  const expired = isExpired(item.validTo);
-                  const displayStatus = expired && item.status === 'APPROVED' ? 'EXPIRED' : item.status;
-                  const expanded = expandedEvidenceId === item.id;
-                  const attachments = attachmentsByEvidenceId[item.id] || [];
-
-                  return (
-                    <tr key={item.id} className="hover:bg-gray-50">
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm font-medium text-gray-900">{getControlName(item.controlId)}</div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm text-gray-900">{item.source}</div>
-                        {item.reference && <div className="text-xs text-gray-500">{item.reference}</div>}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <span
-                          className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(displayStatus)}`}
-                        >
-                          {displayStatus.replace('_', ' ')}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {item.validFrom ? new Date(item.validFrom).toLocaleDateString() : '-'}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {item.validTo ? (
-                          <span className={expired ? 'text-red-600 font-medium' : ''}>
-                            {new Date(item.validTo).toLocaleDateString()}
-                          </span>
-                        ) : (
-                          '-'
-                        )}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm">
-                        <button
-                          type="button"
-                          onClick={() => void toggleAttachments(item.id)}
-                          className="text-blue-600 hover:text-blue-800 font-medium"
-                        >
-                          {expanded ? 'Hide' : 'Manage'} ({attachments.length})
-                        </button>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                        <div className="flex items-center justify-end gap-2">
-                          {item.status === 'SUBMITTED' && (
-                            <>
-                              <button
-                                onClick={() => void handleStatusChange(item.id, 'APPROVED')}
-                                className="text-green-600 hover:text-green-900 text-xs"
-                                title="Approve"
-                              >
-                                Approve
-                              </button>
-                              <button
-                                onClick={() => void handleStatusChange(item.id, 'MISSING')}
-                                className="text-red-600 hover:text-red-900 text-xs"
-                                title="Reject"
-                              >
-                                Reject
-                              </button>
-                            </>
-                          )}
-                          <button onClick={() => setEditingEvidence(item)} className="text-blue-600 hover:text-blue-900">
-                            Edit
-                          </button>
-                          <button onClick={() => void handleDelete(item.id)} className="text-red-600 hover:text-red-900">
-                            Delete
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-
-            {expandedEvidenceId && (
-              <div className="border-t border-gray-200 bg-gray-50 p-4">
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div className="text-sm font-semibold text-gray-900">Attachments</div>
-                  <label className="inline-flex items-center gap-2 rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 cursor-pointer">
-                    <input
-                      type="file"
-                      className="hidden"
-                      onChange={(e) => {
-                        const f = e.target.files?.[0];
-                        if (!f || !expandedEvidenceId) return;
-                        void uploadAttachment(expandedEvidenceId, f);
-                        e.currentTarget.value = '';
-                      }}
-                      disabled={uploadingEvidenceId === expandedEvidenceId}
-                    />
-                    {uploadingEvidenceId === expandedEvidenceId ? 'Uploading…' : 'Upload file'}
-                  </label>
-                </div>
-
-                <div className="mt-3 space-y-2">
-                  {(attachmentsByEvidenceId[expandedEvidenceId] || []).length === 0 ? (
-                    <div className="text-sm text-gray-600">No attachments yet.</div>
-                  ) : (
-                    (attachmentsByEvidenceId[expandedEvidenceId] || []).map((a) => (
-                      <div
-                        key={a.id}
-                        className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-gray-200 bg-white px-3 py-2"
-                      >
-                        <div className="min-w-0">
-                          <div className="truncate text-sm font-medium text-gray-900">{a.filename}</div>
-                          <div className="text-xs text-gray-600">
-                            {(a.sizeBytes / 1024).toFixed(1)} KB · sha256 {a.sha256.slice(0, 8)}…
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-3">
-                          <a
-                            className="text-sm font-medium text-blue-600 hover:text-blue-800"
-                            href={`/api/evidence/attachments/${a.id}/download`}
-                            target="_blank"
-                            rel="noreferrer"
-                          >
-                            Download
-                          </a>
-                          <button
-                            type="button"
-                            onClick={() => void deleteAttachment(expandedEvidenceId, a.id)}
-                            className="text-sm font-medium text-red-600 hover:text-red-800"
-                          >
-                            Delete
-                          </button>
-                        </div>
-                      </div>
-                    ))
-                  )}
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-
-        <div className="mt-8 bg-white shadow rounded-lg p-6">
-          <h2 className="text-lg font-semibold text-gray-900 mb-4">Coverage Summary</h2>
-          <div className="grid grid-cols-4 gap-4">
-            <div className="text-center">
-              <div className="text-2xl font-bold text-gray-900">
-                {evidence.filter((e) => e.status === 'APPROVED' && !isExpired(e.validTo)).length}
-              </div>
-              <div className="text-sm text-gray-500">Approved</div>
-            </div>
-            <div className="text-center">
-              <div className="text-2xl font-bold text-yellow-600">{evidence.filter((e) => e.status === 'SUBMITTED').length}</div>
-              <div className="text-sm text-gray-500">Pending</div>
-            </div>
-            <div className="text-center">
-              <div className="text-2xl font-bold text-red-600">
-                {evidence.filter((e) => e.status === 'EXPIRED' || isExpired(e.validTo)).length}
-              </div>
-              <div className="text-sm text-gray-500">Expired</div>
-            </div>
-            <div className="text-center">
-              <div className="text-2xl font-bold text-gray-600">{evidence.filter((e) => e.status === 'MISSING').length}</div>
-              <div className="text-sm text-gray-500">Missing</div>
-            </div>
-          </div>
-        </div>
+        ) : null}
       </div>
-
-      {(showCreateModal || editingEvidence) && (
-        <EvidenceModal
-          evidence={editingEvidence}
-          controls={controls}
-          onClose={() => {
-            setShowCreateModal(false);
-            setEditingEvidence(null);
-          }}
-          onSave={async () => {
-            await loadData();
-            setShowCreateModal(false);
-            setEditingEvidence(null);
-          }}
-        />
-      )}
+      <EvidenceModal
+        open={creating || Boolean(editingEvidence)}
+        evidence={editingEvidence}
+        controls={controls}
+        onClose={() => {
+          setCreating(false);
+          setEditingEvidence(null);
+        }}
+        onSaved={async () => {
+          setCreating(false);
+          setEditingEvidence(null);
+          await loadData();
+        }}
+      />
     </AppLayout>
   );
 }
 
-function EvidenceModal({
-  evidence,
-  controls,
-  onClose,
-  onSave,
-}: {
-  evidence: Evidence | null;
-  controls: Control[];
-  onClose: () => void;
-  onSave: () => void;
-}) {
-  const [formData, setFormData] = useState({
-    controlId: evidence?.controlId || '',
-    source: evidence?.source || '',
-    status: evidence?.status || 'MISSING',
-    validFrom: evidence?.validFrom ? evidence.validFrom.split('T')[0] : '',
-    validTo: evidence?.validTo ? evidence.validTo.split('T')[0] : '',
-    reference: evidence?.reference || '',
-  });
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError('');
-    setLoading(true);
-
-    try {
-      if (!formData.controlId) {
-        setError('Control is required');
-        setLoading(false);
-        return;
-      }
-
-      if (!formData.source.trim()) {
-        setError('Source is required');
-        setLoading(false);
-        return;
-      }
-
-      const payload = {
-        ...formData,
-        validFrom: formData.validFrom || undefined,
-        validTo: formData.validTo || undefined,
-      };
-
-      let result;
-      if (evidence) {
-        result = await api.patch(`/api/evidence/${evidence.id}`, payload);
-      } else {
-        result = await api.post('/api/evidence', payload);
-      }
-
-      if (result.success) {
-        onSave();
-      } else {
-        setError(result.error || 'Failed to save evidence');
-      }
-    } catch (err) {
-      setError('Failed to save evidence');
-    } finally {
-      setLoading(false);
-    }
-  };
-
+function ErrorBanner({ message, onRetry }: { message: string; onRetry: () => void }) {
   return (
-    <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
-      <div className="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
-        <div className="mt-3">
-          <h3 className="text-lg font-medium text-gray-900 mb-4">{evidence ? 'Edit Evidence' : 'Add Evidence'}</h3>
-
-          {error && (
-            <div className="mb-4 rounded-md bg-red-50 p-3">
-              <p className="text-sm text-red-800">{error}</p>
-            </div>
-          )}
-
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700">Control *</label>
-              <select
-                required
-                value={formData.controlId}
-                onChange={(e) => setFormData({ ...formData, controlId: e.target.value })}
-                className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-blue-500"
-              >
-                <option value="">Select a control</option>
-                {controls.map((control) => (
-                  <option key={control.id} value={control.id}>
-                    {control.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700">Source *</label>
-              <input
-                type="text"
-                required
-                value={formData.source}
-                onChange={(e) => setFormData({ ...formData, source: e.target.value })}
-                placeholder="e.g., Evidentia, Upload, Integration"
-                className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-blue-500"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700">Status</label>
-              <select
-                value={formData.status}
-                onChange={(e) => setFormData({ ...formData, status: e.target.value as Evidence['status'] })}
-                className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-blue-500"
-              >
-                <option value="MISSING">Missing</option>
-                <option value="SUBMITTED">Submitted</option>
-                <option value="APPROVED">Approved</option>
-                <option value="EXPIRED">Expired</option>
-              </select>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Valid From</label>
-                <input
-                  type="date"
-                  value={formData.validFrom}
-                  onChange={(e) => setFormData({ ...formData, validFrom: e.target.value })}
-                  className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-blue-500"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Valid To</label>
-                <input
-                  type="date"
-                  value={formData.validTo}
-                  onChange={(e) => setFormData({ ...formData, validTo: e.target.value })}
-                  className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-blue-500"
-                />
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700">Reference</label>
-              <input
-                type="text"
-                value={formData.reference}
-                onChange={(e) => setFormData({ ...formData, reference: e.target.value })}
-                placeholder="Optional reference or link"
-                className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-blue-500"
-              />
-            </div>
-
-            <div className="flex justify-end gap-3 pt-4">
-              <button
-                type="button"
-                onClick={onClose}
-                className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                disabled={loading}
-                className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50"
-              >
-                {loading ? 'Saving...' : evidence ? 'Update' : 'Create'}
-              </button>
-            </div>
-          </form>
-        </div>
+    <div className="rounded-md border border-red-200 bg-red-50 p-4 text-sm text-red-800 dark:border-red-900 dark:bg-red-950 dark:text-red-200">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <span>{message}</span>
+        <button onClick={onRetry} className="font-semibold underline">
+          Retry
+        </button>
       </div>
     </div>
   );
 }
 
+function EvidenceModal(props: {
+  open: boolean;
+  evidence: Evidence | null;
+  controls: Control[];
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const [formData, setFormData] = useState({
+    controlId: props.evidence?.controlId || '',
+    source: props.evidence?.source || 'SAI',
+    reference: props.evidence?.reference || '',
+    validFrom: props.evidence?.validFrom?.slice(0, 10) || '',
+    validTo: props.evidence?.validTo?.slice(0, 10) || '',
+    status: props.evidence?.status || 'SUBMITTED',
+  });
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    setFormData({
+      controlId: props.evidence?.controlId || '',
+      source: props.evidence?.source || 'SAI',
+      reference: props.evidence?.reference || '',
+      validFrom: props.evidence?.validFrom?.slice(0, 10) || '',
+      validTo: props.evidence?.validTo?.slice(0, 10) || '',
+      status: props.evidence?.status || 'SUBMITTED',
+    });
+  }, [props.evidence, props.open]);
+
+  const submit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setSaving(true);
+    setError('');
+    const payload = {
+      ...formData,
+      reference: formData.reference.trim() || undefined,
+      validFrom: formData.validFrom || undefined,
+      validTo: formData.validTo || undefined,
+    };
+    const result = props.evidence
+      ? await api.patch(`/api/evidence/${props.evidence.id}`, payload)
+      : await api.post('/api/evidence', payload);
+    setSaving(false);
+    if (!result.success) {
+      setError(result.error || 'Failed to save evidence');
+      return;
+    }
+    props.onSaved();
+  };
+
+  return (
+    <Modal open={props.open} title={props.evidence ? 'Edit evidence' : 'Add evidence'} onClose={props.onClose}>
+      <form onSubmit={submit} className="space-y-4">
+        {error ? <p className="rounded-md bg-red-50 p-3 text-sm text-red-800">{error}</p> : null}
+        <FormField label="Control" htmlFor="evidence-control" required>
+          <select id="evidence-control" className={fieldClassName} value={formData.controlId} onChange={(event) => setFormData({ ...formData, controlId: event.target.value })} required>
+            <option value="">Select control</option>
+            {props.controls.map((control) => (
+              <option key={control.id} value={control.id}>
+                {control.name}
+              </option>
+            ))}
+          </select>
+        </FormField>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <FormField label="Source" htmlFor="evidence-source" required>
+            <input id="evidence-source" className={fieldClassName} value={formData.source} onChange={(event) => setFormData({ ...formData, source: event.target.value })} required />
+          </FormField>
+          <FormField label="Status" htmlFor="evidence-status">
+          <select
+            id="evidence-status"
+            className={fieldClassName}
+            value={formData.status}
+            onChange={(event) =>
+              setFormData({ ...formData, status: event.target.value as Evidence['status'] })
+            }
+          >
+              {EVIDENCE_STATUSES.map((status) => (
+                <option key={status} value={status}>
+                  {status.replaceAll('_', ' ')}
+                </option>
+              ))}
+            </select>
+          </FormField>
+        </div>
+        <FormField label="Reference" htmlFor="evidence-reference">
+          <input id="evidence-reference" className={fieldClassName} value={formData.reference} onChange={(event) => setFormData({ ...formData, reference: event.target.value })} />
+        </FormField>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <FormField label="Valid from" htmlFor="evidence-valid-from">
+            <input id="evidence-valid-from" type="date" className={fieldClassName} value={formData.validFrom} onChange={(event) => setFormData({ ...formData, validFrom: event.target.value })} />
+          </FormField>
+          <FormField label="Valid to" htmlFor="evidence-valid-to">
+            <input id="evidence-valid-to" type="date" className={fieldClassName} value={formData.validTo} onChange={(event) => setFormData({ ...formData, validTo: event.target.value })} />
+          </FormField>
+        </div>
+        <div className="flex justify-end gap-2">
+          <button type="button" onClick={props.onClose} className="rounded-md border border-gray-300 px-4 py-2 text-sm font-semibold text-gray-700">
+            Cancel
+          </button>
+          <button disabled={saving} className="rounded-md bg-gray-900 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">
+            {saving ? 'Saving...' : 'Save evidence'}
+          </button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
