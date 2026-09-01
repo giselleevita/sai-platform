@@ -13,6 +13,7 @@ RUN npm ci
 
 FROM base AS build
 COPY --from=deps /app/node_modules ./node_modules
+COPY --from=deps /app/apps/api/node_modules ./apps/api/node_modules
 COPY . .
 # Build only the API package (workspace aware)
 RUN npm run build -- --filter=@sai/api
@@ -25,6 +26,7 @@ COPY --from=build /app/apps/api/dist ./dist
 COPY --from=build /app/apps/api/prisma ./prisma
 COPY --from=build /app/apps/api/package*.json ./
 COPY --from=deps /app/node_modules ./node_modules
+COPY --from=deps /app/apps/api/node_modules ./node_modules
 
 EXPOSE 3001
 CMD ["node", "dist/main.js"]

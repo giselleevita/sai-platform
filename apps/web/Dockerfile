@@ -11,6 +11,7 @@ RUN npm ci
 
 FROM base AS build
 COPY --from=deps /app/node_modules ./node_modules
+COPY --from=deps /app/apps/web/node_modules ./apps/web/node_modules
 COPY . .
 # Build only the web workspace
 RUN npm run build -- --filter=web
@@ -23,6 +24,7 @@ COPY --from=build /app/apps/web/.next ./.next
 COPY --from=build /app/apps/web/next.config.ts ./next.config.ts
 COPY --from=build /app/apps/web/package*.json ./
 COPY --from=deps /app/node_modules ./node_modules
+COPY --from=deps /app/apps/web/node_modules ./node_modules
 
 EXPOSE 3000
 CMD ["npx", "next", "start", "--hostname", "0.0.0.0", "--port", "3000"]
