@@ -4,6 +4,10 @@
 
 SAI Platform is a self-hosted system for AI inventory, risk assessment, and compliance evidence, built against the control structure of the EU AI Act and NIS2. It is a multi-tenant TypeScript monorepo (Next.js frontend, Express/Prisma API, PostgreSQL) with 41 Prisma-modeled entities, 30 API controllers, and 41 backend services.
 
+| Dashboard | Add a tool | Inventory & risk scoring |
+|---|---|---|
+| ![Dashboard](docs/screenshots/dashboard.png) | ![Add AI Tool](docs/screenshots/add-tool.png) | ![Inventory](docs/screenshots/inventory.png) |
+
 ## What it does
 
 - **AI Tool Inventory** — register and categorize every AI tool in use, with risk scoring per tool.
