@@ -16,3 +16,5 @@ coverage/
 
 # Local/generated review outputs
 /reports/
+.cursor/
+.claude/

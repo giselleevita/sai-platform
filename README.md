@@ -1,208 +1,126 @@
-# SAI Platform - Enterprise AI Governance Platform
+# SAI Platform — AI Governance & Compliance
 
-**Govern every AI decision — with accountability, risk control, and audit-ready proof.**
+**Track every AI tool an organization uses, score its risk, and produce the audit trail regulators ask for.**
 
-SAI Platform is a **production-ready, enterprise-grade** secure AI integration management system that helps organizations assess AI risk, enforce policies, and prove compliance with regulations like the EU AI Act and NIS2.
+SAI Platform is a self-hosted system for AI inventory, risk assessment, and compliance evidence, built against the control structure of the EU AI Act and NIS2. It is a multi-tenant TypeScript monorepo (Next.js frontend, Express/Prisma API, PostgreSQL) with 41 Prisma-modeled entities, 30 API controllers, and 41 backend services.
 
-## 🎯 What It Does
+## What it does
 
-SAI Platform provides comprehensive AI governance, risk management, and compliance tracking:
+- **AI Tool Inventory** — register and categorize every AI tool in use, with risk scoring per tool.
+- **Risk Management** — likelihood/impact assessment with an accept/defer/reject decision trail and management sign-off.
+- **Compliance & Governance** — policy and control registry, evidence tracking with expiry and approval status, EU AI Act control mapping (see [`docs/EU_AI_ACT_MAPPING.md`](docs/EU_AI_ACT_MAPPING.md)).
+- **Incident Tracking** — full incident lifecycle with severity classification and reporting deadlines.
+- **Audit Logging** — activity feed and audit trail across tenants, exportable for review.
+- **Reporting** — PDF report generation, Excel import/export, webhooks for external integrations.
 
-- **AI Tool Inventory** - Centralized registry of all AI tools with risk scoring
-- **Risk Management** - Automated risk assessment with likelihood/impact analysis
-- **Compliance Monitoring** - Policy enforcement, control tracking, and evidence management
-- **Incident Tracking** - Complete incident lifecycle management with reporting deadlines
-- **Audit Logging** - Comprehensive audit trail with activity feed
-- **Report Generation** - PDF reports, Excel exports, and custom report builder
-- **Governance Workflows** - Policy management, control tracking, and decision traceability
+## Multi-tenant isolation
 
-## ✨ Key Features
+Every domain object (evidence, risks, incidents, vendors) is scoped by company at the query layer, not just the UI. This is the part most internal tools get wrong, so it has direct test coverage rather than being asserted:
 
-### Core Capabilities
-- ✅ **AI Tool Inventory** - Register, categorize, and track all AI tools
-- ✅ **Automated Risk Scoring** - AI-powered risk assessment with explainable factors
-- ✅ **Risk Decision Management** - Accept, defer, or reject risks with management sign-off
-- ✅ **Policy & Control Management** - Central registry of policies, controls, and procedures
-- ✅ **Evidence Governance** - Track evidence coverage, expiry, and approval status
-- ✅ **Incident Management** - Full incident lifecycle with severity classification
-- ✅ **Compliance Dashboards** - Real-time compliance status and gap analysis
-- ✅ **Audit Logging** - Complete audit trail with search and export capabilities
+```
+apps/api/src/__tests__/evidence-tenant-scope.test.ts
+apps/api/src/__tests__/risk-tenant-scope.test.ts
+apps/api/src/__tests__/incident-tenant-scope.test.ts
+apps/api/src/__tests__/vendor-tenant-scope.test.ts
+apps/api/src/__tests__/exception-tenant-scope.test.ts
+```
 
-### Advanced Features
-- ✅ **Activity Feed** - Real-time activity tracking across the platform
-- ✅ **Comments & Discussions** - Threaded comments on tools, risks, and incidents
-- ✅ **Excel Import/Export** - Bulk import tools and risks, export data for analysis
-- ✅ **Webhooks** - Event-based integrations with external systems
-- ✅ **Custom Fields** - Extensible data model for organization-specific metadata
-- ✅ **API Documentation** - Complete OpenAPI 3.0 documentation
+## Security
 
-### Enterprise Security
-- ✅ **httpOnly Cookies** - Secure token storage with CSRF protection
-- ✅ **Rate Limiting** - Multi-tier rate limiting (API, auth, reports)
-- ✅ **Input Validation** - Comprehensive Zod schema validation
-- ✅ **RBAC** - Role-based access control with permission enforcement
-- ✅ **Soft Deletes** - Recoverable deletions with audit trail
-- ✅ **Structured Logging** - Request IDs and comprehensive logging
+- JWT auth in httpOnly cookies with CSRF protection (covered by `csrf.middleware.test.ts` and `csrf.integration.test.ts`)
+- RBAC with permission enforcement at the middleware layer
+- Zod schema validation on API input
+- Multi-tier rate limiting (API, auth, reports)
+- Soft deletes with audit trail
 
-### Performance & Scalability
-- ✅ **Pagination** - Efficient pagination on all list endpoints
-- ✅ **Full-Text Search** - Server-side search and filtering
-- ✅ **Redis Caching** - Caching strategy ready for production
-- ✅ **Database Indexing** - Optimized queries with proper indexes
+## Tech stack
 
-## 🏗️ Architecture
+- **Frontend**: Next.js 16, React, TypeScript, Tailwind CSS
+- **Backend**: Node.js, Express, TypeScript, Prisma ORM
+- **Database**: PostgreSQL (Neon-compatible), 20 versioned migrations
+- **Auth**: JWT / httpOnly cookies, OIDC, SCIM
+- **Testing**: Jest — 27 test files covering auth, tenant isolation, CSRF, billing, and email delivery
+
+## Architecture
 
 ```
 sai-platform/
 ├── apps/
 │   ├── web/          # Next.js frontend dashboard
-│   └── api/          # Node.js/Express backend
+│   └── api/          # Node.js/Express backend, Prisma schema + migrations
 ├── packages/
 │   ├── shared-types/     # Shared TypeScript types
 │   └── risk-scoring/     # Risk calculation algorithms
-├── docs/             # Documentation
-├── scripts/          # Utility scripts
-└── tests/            # Test suites
+├── docs/             # Setup, architecture, deployment, API reference
+└── scripts/          # Utility scripts
 ```
 
-**Tech Stack:**
-- **Frontend**: Next.js 16, React, TypeScript, Tailwind CSS
-- **Backend**: Node.js, Express, TypeScript, Prisma ORM
-- **Database**: PostgreSQL (with Neon support)
-- **Caching**: Redis (optional)
-- **Authentication**: JWT with httpOnly cookies, CSRF protection
-- **Validation**: Zod schemas
-- **Testing**: Jest
+## Quick start
 
-## 🚀 Quick Start
-
-### Prerequisites
-
-- Node.js v20.9 or higher
-- npm v9 or higher
-- Docker and Docker Compose (for local database)
-- Git
-
-### Installation
+**Prerequisites:** Node.js v20.9+, npm v9+, Docker (for local Postgres).
 
 ```bash
-# 1. Install dependencies
 npm install
-
-# 2. Run one-command local setup
-npm run setup
-
-# 3. Configure environment variables (if needed)
-# apps/api/.env will be created from apps/api/env.example
-# Update JWT_SECRET before sharing environments
-
-# 4. Start development servers
+npm run setup      # provisions local DB, runs migrations
 npm run dev
 ```
 
-Access:
-- **Frontend**: http://localhost:3000
-- **API**: http://localhost:3001
-- **API Docs**: http://localhost:3001/api-docs
+- Frontend: http://localhost:3000
+- API: http://localhost:3001
+- API docs (OpenAPI): http://localhost:3001/api-docs
 
-## 📚 Documentation
+Set `JWT_SECRET` in `apps/api/.env` before sharing an environment — `npm run setup` generates one for local use only.
 
-### Essential Guides
+## Documentation
 
-- **[Getting Started](docs/GETTING_STARTED.md)** - Complete setup guide (⭐ Start here)
-- **[How It Works](docs/HOW_IT_WORKS.md)** - Platform overview and architecture
-- **[Quick Start](docs/QUICK_START.md)** - Quick reference commands
-- **[Troubleshooting](docs/TROUBLESHOOTING.md)** - Common issues and solutions
+- **[Getting Started](docs/GETTING_STARTED.md)** — full setup guide
+- **[How It Works](docs/HOW_IT_WORKS.md)** — architecture and data flow
+- **[Structure](docs/STRUCTURE.md)** — code organization
+- **[API Reference](docs/API_ROUTES_COMPLETE.md)** — endpoint documentation
+- **[Deployment](docs/DEPLOYMENT.md)** — production deployment guide
+- **[CI/CD](docs/CI_CD.md)** — pipeline configuration
+- **[Troubleshooting](docs/TROUBLESHOOTING.md)**
 
-### Technical Documentation
+## Development
 
-- **[Structure](docs/STRUCTURE.md)** - Project architecture and code organization
-- **[API Reference](docs/API_ROUTES_COMPLETE.md)** - Complete API endpoint documentation
-- **[Deployment](docs/DEPLOYMENT.md)** - Production deployment guide
-- **[CI/CD](docs/CI_CD.md)** - Continuous integration setup
-- **[MVP Release Notes](docs/RELEASE_NOTES_MVP.md)** - Delivered scope, known limits, and rollback notes
-
-All documentation is in the `docs/` directory.
-
-## 🛠️ Development
-
-### CI (GitHub Actions)
-
-Pull requests and pushes to `main` run **Quality Gate** (workspace build, `npm test`, CSRF security gate) and **Sprint smoke** (Postgres service, `build:api`, `test:sprint`). To keep `main` healthy, enable **branch protection** in the repository settings: require both jobs **Build + Test (Node 20)** and **Sprint smoke (API + Postgres)** as required status checks before merge.
-
-### Common Commands
+### Common commands
 
 ```bash
-# Start all services
-npm run dev
+npm run dev             # start all services
+npm run build           # build all packages
+npm run test            # run the Jest suite
+npm run test:mvp        # core end-to-end smoke flow
+npm run test:csrf       # CSRF/auth behavior smoke flow
 
-# Build all packages
-npm run build
-
-# Run tests
-npm run test
-
-# Run core MVP end-to-end smoke flow
-npm run test:mvp
-
-# Run CSRF/auth behavior smoke flow
-npm run test:csrf
-
-# Database management
 cd apps/api
-npm run db:studio    # Open Prisma Studio (database GUI)
-npm run db:migrate   # Run migrations
-npm run db:push      # Push schema changes (dev only)
+npm run db:studio       # Prisma Studio (DB GUI)
+npm run db:migrate      # run migrations
 ```
 
-### Project Structure
+### CI
 
-- **Backend**: `apps/api/src/` - Express API with controllers, services, routes
-- **Frontend**: `apps/web/app/` - Next.js pages and components
-- **Shared**: `packages/` - Shared TypeScript types and utilities
+GitHub Actions runs a **Quality Gate** (build, `npm test`, CSRF security gate) and a **Sprint smoke** job (Postgres service, API build, integration smoke) on every PR to `main`.
 
-## 📊 Platform Status
+## Known gaps
 
-### ✅ Production Ready
+Being direct about what's not yet covered, rather than claiming otherwise:
 
-- **Features**: 29/29 (100%) - All core and advanced features implemented
-- **Security**: Enterprise-grade with httpOnly cookies, CSRF, rate limiting
-- **Performance**: Optimized with pagination, search, and caching
-- **Documentation**: Complete API docs and user guides
-- **Testing**: Jest framework configured with example tests
+- No frontend test coverage yet (`apps/web` has no `.test.tsx` files) — API and tenant-isolation logic is tested, UI is not.
+- The full-flow e2e coverage ([`tests/api/test-mvp-happy-path.sh`](tests/api/test-mvp-happy-path.sh): auth → inventory → risk → policy/control → evidence → report) exercises the API directly over HTTP. There is no browser-level test (Playwright/Cypress) driving the actual UI.
+- Backend Jest coverage is concentrated on auth, tenant isolation, CSRF, and billing — not yet on every service.
 
-### Key Metrics
+These are the current priorities for hardening the project further.
 
-- **Backend Services**: 20+
-- **API Endpoints**: 80+
-- **Frontend Pages**: 24+
-- **Database Models**: 26
-- **Total Files**: 100+ TypeScript files
+## Deployment
 
-## 🔐 Security Features
+Designed for:
+- **AWS ECS Fargate** — containerized API
+- **Neon** — managed PostgreSQL with SSL
+- **S3 + CloudFront** (or Vercel) — static frontend hosting
+- **Redis** (optional) — caching layer
 
-- **Authentication**: JWT tokens in httpOnly cookies with CSRF protection
-- **Authorization**: Role-based access control (RBAC) with permission enforcement
-- **Input Validation**: Comprehensive Zod schema validation on all endpoints
-- **Rate Limiting**: Multi-tier rate limiting to prevent abuse
-- **Audit Logging**: Complete audit trail for compliance
-- **Data Isolation**: Company-level data isolation enforced
+See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for details.
 
-## 🚀 Deployment
+## License
 
-The platform is ready for production deployment to:
-
-- **AWS ECS Fargate** - Containerized API deployment
-- **Neon Database** - Managed PostgreSQL with SSL
-- **S3 + CloudFront** - Static frontend hosting (or Vercel)
-- **Redis** - Optional caching layer (ElastiCache)
-
-See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for detailed deployment instructions.
-
-## 📝 License
-
-Private - All rights reserved
-
----
-
-**Status**: ✅ **PRODUCTION READY** | **Version**: 1.0.0 | **Last Updated**: January 2026
+Private — All rights reserved.
