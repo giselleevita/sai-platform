@@ -75,6 +75,7 @@ export class AIToolService {
         level: riskResult.level,
         factors: riskResult.factors,
         recommendations: riskResult.recommendations,
+        modelVersion: riskResult.modelVersion,
       },
     });
 
@@ -320,6 +321,7 @@ export class AIToolService {
         level: riskResult.level,
         factors: riskResult.factors,
         recommendations: riskResult.recommendations,
+        modelVersion: riskResult.modelVersion,
       },
     });
 

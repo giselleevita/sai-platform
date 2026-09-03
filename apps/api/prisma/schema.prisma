@@ -351,6 +351,9 @@ model RiskScore {
   level           String
   factors         Json
   recommendations String[]
+  // Which version of the scoring model produced this score. Null for rows
+  // written before the model was versioned.
+  modelVersion    String?
   createdAt       DateTime @default(now())
   tool            AITool   @relation(fields: [toolId], references: [id], onDelete: Cascade)
 

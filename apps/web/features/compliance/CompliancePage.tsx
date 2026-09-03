@@ -45,7 +45,7 @@ export default function CompliancePage() {
   const captureSnapshot = async () => {
     setError('');
     setLoading(true);
-    const res = await api.post('/api/governance/capture-snapshot', {});
+    const res = await api.post('/api/governance/compliance-snapshots', {});
     if (!res.success) setError(res.error || 'Failed to capture snapshot');
     const next = await api.get<ApiComplianceSnapshot[]>('/api/governance/compliance-snapshots');
     if (next.success) setRows(Array.isArray(next.data) ? next.data : []);

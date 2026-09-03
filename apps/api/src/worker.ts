@@ -1,5 +1,5 @@
 import { logger } from './utils';
-import { ScheduledReportsService } from './modules/reports';
+import { ScheduledReportsService } from './services/scheduled-reports.service';
 import { verifyRecentAttachments } from './services/attachments/verify-attachments';
 
 async function main() {

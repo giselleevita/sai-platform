@@ -20,6 +20,8 @@ export interface RiskScore {
     frequency: number;
   };
   recommendations: string[];
+  /** Version of the scoring model that produced this score. */
+  modelVersion: string;
 }
 
 export interface User {
