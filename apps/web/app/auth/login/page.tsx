@@ -5,6 +5,12 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { api } from '@/lib/api';
 
+// Shown only where a demo tenant exists. The page used to advertise a
+// hardcoded pair that no deployment creates, so the button failed on a fresh
+// install and invited people to try known credentials against production.
+const DEMO_EMAIL = process.env.NEXT_PUBLIC_DEMO_EMAIL;
+const DEMO_PASSWORD = process.env.NEXT_PUBLIC_DEMO_PASSWORD;
+
 export default function LoginPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
@@ -173,30 +179,25 @@ export default function LoginPage() {
           </Link>
         </p>
 
-        {/* Demo Credentials */}
-        <div className="mt-8 rounded-md bg-blue-50 p-4">
-          <p className="text-sm font-medium text-blue-900 mb-2">Demo Credentials</p>
-          <p className="mt-1 text-xs text-blue-700 mb-1">
-            Email: <code className="bg-blue-100 px-1 py-0.5 rounded">test@sai.com</code>
-          </p>
-          <p className="text-xs text-blue-700 mb-2">
-            Password: <code className="bg-blue-100 px-1 py-0.5 rounded">Password123</code>
-          </p>
-          <button
-            type="button"
-            onClick={async () => {
-              setFormData({
-                email: 'test@sai.com',
-                password: 'Password123',
-              });
-              // Auto-submit after filling
-              setTimeout(async () => {
+        {DEMO_EMAIL && DEMO_PASSWORD ? (
+          <div className="mt-8 rounded-md bg-blue-50 p-4">
+            <p className="text-sm font-medium text-blue-900 mb-2">Demo credentials</p>
+            <p className="mt-1 text-xs text-blue-700 mb-1">
+              Email: <code className="bg-blue-100 px-1 py-0.5 rounded">{DEMO_EMAIL}</code>
+            </p>
+            <p className="text-xs text-blue-700 mb-2">
+              Password: <code className="bg-blue-100 px-1 py-0.5 rounded">{DEMO_PASSWORD}</code>
+            </p>
+            <button
+              type="button"
+              onClick={async () => {
+                setFormData({ email: DEMO_EMAIL, password: DEMO_PASSWORD });
                 setError('');
                 setLoading(true);
                 try {
                   const result = await api.post('/api/auth/login', {
-                    email: 'test@sai.com',
-                    password: 'Password123',
+                    email: DEMO_EMAIL,
+                    password: DEMO_PASSWORD,
                   });
 
                   if (!result.success) {
@@ -205,27 +206,24 @@ export default function LoginPage() {
                     return;
                   }
 
-                  // Store CSRF token from response (cookies are set automatically by server)
                   const loginData = result.data as any;
                   if (loginData?.csrfToken) {
                     localStorage.setItem('csrf-token', loginData.csrfToken);
                   }
 
-                  // Redirect to dashboard
                   router.push('/dashboard');
                 } catch (err) {
                   const errorMessage = err instanceof Error ? err.message : 'Network error';
                   setError(`Failed to connect: ${errorMessage}. Make sure the backend is running.`);
-                  console.error(err);
                   setLoading(false);
                 }
-              }, 100);
-            }}
-            className="w-full mt-2 px-4 py-2 bg-blue-600 text-white rounded-md text-sm font-medium hover:bg-blue-700 transition-colors"
-          >
-            Sign in with Demo Credentials
-          </button>
-        </div>
+              }}
+              className="w-full mt-2 px-4 py-2 bg-blue-600 text-white rounded-md text-sm font-medium hover:bg-blue-700 transition-colors"
+            >
+              Sign in with demo credentials
+            </button>
+          </div>
+        ) : null}
       </div>
     </div>
   );

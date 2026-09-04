@@ -17,3 +17,7 @@ coverage/
 
 # Local/generated review outputs
 /reports/
+
+# next dev writes these agent rule files into the workspace
+AGENTS.md
+CLAUDE.md

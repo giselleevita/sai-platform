@@ -11,6 +11,11 @@
  * so the numbers on screen match what the platform would calculate for the
  * same input, model version included.
  */
+// The Prisma CLI loads apps/api/.env for us, but `ts-node prisma/seed.ts`
+// does not, so the documented command failed unless DATABASE_URL happened to
+// be exported in the shell already.
+import 'dotenv/config';
+
 import { PrismaClient, UserRole } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 import { calculateRiskScore } from '@sai/risk-scoring';
