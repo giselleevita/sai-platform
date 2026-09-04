@@ -1,24 +1,30 @@
-# One-click deployment of the demo: Render reads this, creates both services
-# and wires them together. The only value it asks for is DATABASE_URL, which
-# comes from a free Neon project.
+# One-click deployment of the public demo.
+#
+# A single service on purpose. A free Render workspace has 750 instance hours a
+# month, enough to keep one service awake around the clock but not two, so the
+# API and the web app ship in one container and an uptime ping every ten minutes
+# keeps the demo permanently warm. Nobody waits a minute for a cold start.
+#
+# The real topology is two services: see docker-compose.prod.yml.
 #
 # Render turns service environment variables into Docker build arguments, which
-# matters here: Next bakes the API origin and every NEXT_PUBLIC_* value into the
-# build, so they have to be present before the image is built rather than after.
+# this depends on: Next bakes every NEXT_PUBLIC_* value into the build.
 services:
   - type: web
-    name: sai-api
+    name: sai-demo
     runtime: docker
     plan: free
     region: frankfurt
-    dockerfilePath: ./apps/api/Dockerfile
+    dockerfilePath: ./Dockerfile.demo
     dockerContext: .
-    healthCheckPath: /health
+    # Goes through the web app's proxy to the API, so a passing check means
+    # both processes are alive, not just the one holding the port.
+    healthCheckPath: /api/health
     envVars:
       - key: NODE_ENV
         value: production
       # Free plans have no shell, so the container migrates and seeds itself
-      # on boot. Both are idempotent.
+      # on boot. Both are idempotent, which also makes a restart the reset.
       - key: SEED_ON_START
         value: "true"
       # Paste a Neon connection string. Render's own free Postgres expires
@@ -31,26 +37,8 @@ services:
         value: demo@sai-platform.example
       - key: DEMO_USER_PASSWORD
         value: demo-password-123
-      # Caching is optional. Without REDIS_URL the API logs that it is
-      # disabled and carries on.
-
-  - type: web
-    name: sai-web
-    runtime: docker
-    plan: free
-    region: frankfurt
-    dockerfilePath: ./apps/web/Dockerfile
-    dockerContext: .
-    envVars:
-      - key: NODE_ENV
-        value: production
-      - key: API_ORIGIN
-        fromService:
-          type: web
-          name: sai-api
-          property: host
-      # Demo credentials, shown on the login page. Not secrets: they open a
-      # tenant of generated data that is reseeded on every boot.
+      # Shown on the login page. Not secrets: they open a tenant of generated
+      # data that is rebuilt on every boot.
       - key: NEXT_PUBLIC_DEMO_EMAIL
         value: demo@sai-platform.example
       - key: NEXT_PUBLIC_DEMO_PASSWORD

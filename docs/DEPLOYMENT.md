@@ -36,36 +36,43 @@
 
 ---
 
-## Demo deployment: free, and without a server
+## Demo deployment: free, and awake
 
-`render.yaml` deploys both services from this repository. Render reads it,
-builds the two images and wires them to each other, so the only value it asks
-for is the database connection string.
+`render.yaml` deploys the demo from this repository as a single service built
+from `Dockerfile.demo`.
 
-1. Create a free Neon project and copy its connection string. Neon is used
-   rather than Render's own free Postgres, which expires thirty days after
-   creation and takes the demo with it.
+1. Create a free Neon project and copy its connection string. Neon rather than
+   Render's own free Postgres, which expires thirty days after creation and
+   would take the demo with it.
 2. In Render: New, then Blueprint, then point it at this repository.
 3. Paste the Neon string when prompted for `DATABASE_URL`.
+4. Point a free uptime monitor (cron-job.org, UptimeRobot) at
+   `https://<your-service>.onrender.com/api/health` every ten minutes.
 
-That is the whole setup. The API container applies migrations and seeds the
-demo tenant on every boot, both idempotent, because free plans give you no
-shell and a deployment that needs someone to run migrations by hand is a
-deployment that starts broken.
+Step four is what makes it fast. A free Render service sleeps after fifteen
+minutes without traffic and takes about a minute to wake, which is a poor first
+impression for a link on a CV. A free workspace gets 750 instance hours a
+month, and a month is about 730 hours, so one service can stay awake
+continuously but two cannot. That is why the API and the web app ship in one
+container here even though the real topology is two services: it buys a demo
+that is always warm, for nothing.
 
-Render turns service environment variables into Docker build arguments, which
-this repository depends on: Next bakes the API origin and every `NEXT_PUBLIC_*`
-value into the build, so they must exist before the image is built. `API_ORIGIN`
-is filled in from the API service's own hostname, and the config adds the scheme
-when a host arrives without one.
+The health check path goes through the web app's proxy to the API, so a passing
+check means both processes are alive rather than just the one holding the port.
 
-**What free costs you.** A Render free service sleeps after fifteen minutes
-without traffic and takes about a minute to wake, so the first visitor after a
-quiet spell waits. Say so next to the link rather than letting someone assume
-the app is broken. Neon's free compute also scales to zero and wakes in a second
-or two. Neither has a card requirement for the demo sizes used here.
+### No shell, so the container does the work
 
----
+Free plans give you no shell. The container applies migrations on boot and
+seeds the demo tenant when `SEED_ON_START` is true. Both are idempotent, which
+also makes a restart the reset.
+
+### What is build-time
+
+Next inlines `NEXT_PUBLIC_*` values and resolves rewrite destinations during
+`next build`. Render turns service environment variables into Docker build
+arguments, which is what makes the blueprint work without a second pass. Inside
+the demo image the API is a sibling process, so the proxy target is fixed at
+`http://localhost:3001` in the Dockerfile rather than configured per deploy.
 
 ## Alternative: one host, Docker Compose
 

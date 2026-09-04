@@ -184,6 +184,14 @@ yet: `audit`, `exceptions`, `import-export`, `invitations`, `ml-integrations`,
 They are usable through the API and through SCIM where relevant. Listing them
 here is more useful than a screenshot of a screen that does not exist.
 
+### Demo
+
+`render.yaml` deploys a single always-warm service built from
+`Dockerfile.demo`, which runs the API and the web app side by side so one free
+service can stay awake around the clock. See
+[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md). The real topology is two services,
+in `docker-compose.prod.yml`.
+
 ### Demo data
 
 `npm run db:seed --workspace @sai/api` seeds a demo tenant: twelve AI tools

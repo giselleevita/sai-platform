@@ -1,0 +1,68 @@
+# Single-container packaging for the public demo.
+#
+# The real topology is docker-compose.prod.yml: separate API and web services.
+# This image exists because a free Render workspace has 750 instance hours a
+# month, which keeps one service awake around the clock but not two. Running
+# both processes in one container means the demo never sleeps and never makes
+# a visitor wait a minute for a cold start.
+#
+# Next already proxies /api and /scim server-side, so it fronts the container
+# on Render's port and talks to the API on localhost.
+FROM node:20-alpine AS base
+WORKDIR /app
+
+FROM base AS deps
+RUN apk add --no-cache python3 make g++ cairo-dev pango-dev jpeg-dev giflib-dev pixman-dev openssl
+COPY package*.json turbo.json ./
+COPY apps/api/package*.json apps/api/
+COPY apps/api/prisma apps/api/prisma
+COPY apps/web/package*.json apps/web/
+COPY packages/shared-types/package*.json packages/shared-types/
+COPY packages/risk-scoring/package*.json packages/risk-scoring/
+RUN npm ci
+
+FROM base AS build
+# Build-time: Next bakes the proxy target and every NEXT_PUBLIC_* value in.
+# Inside this image the API is a sibling process, so the target is localhost.
+ENV API_ORIGIN="http://localhost:3001"
+ARG NEXT_PUBLIC_DEMO_EMAIL=""
+ARG NEXT_PUBLIC_DEMO_PASSWORD=""
+ENV NEXT_PUBLIC_DEMO_EMAIL=$NEXT_PUBLIC_DEMO_EMAIL
+ENV NEXT_PUBLIC_DEMO_PASSWORD=$NEXT_PUBLIC_DEMO_PASSWORD
+COPY --from=deps /app/node_modules ./node_modules
+COPY --from=deps /app/apps/api/node_modules ./apps/api/node_modules
+COPY --from=deps /app/apps/web/node_modules ./apps/web/node_modules
+COPY . .
+RUN npm run build -- --filter=@sai/api --filter=web
+
+FROM base AS runner
+ENV NODE_ENV=production
+RUN apk add --no-cache cairo pango jpeg giflib pixman openssl
+WORKDIR /app
+
+# API
+COPY --from=build /app/apps/api/dist ./api/dist
+COPY --from=build /app/apps/api/prisma ./api/prisma
+COPY --from=build /app/apps/api/package*.json ./api/
+# Workspace packages, because node_modules/@sai/* are symlinks into packages/.
+COPY --from=build /app/packages/risk-scoring/package.json ./packages/risk-scoring/package.json
+COPY --from=build /app/packages/risk-scoring/dist ./packages/risk-scoring/dist
+COPY --from=build /app/packages/shared-types/package.json ./packages/shared-types/package.json
+COPY --from=build /app/packages/shared-types/dist ./packages/shared-types/dist
+
+# Web
+COPY --from=build /app/apps/web/.next ./web/.next
+COPY --from=build /app/apps/web/next.config.ts ./web/next.config.ts
+COPY --from=build /app/apps/web/package*.json ./web/
+
+COPY --from=deps /app/node_modules ./node_modules
+COPY --from=deps /app/apps/api/node_modules ./api/node_modules
+COPY --from=deps /app/apps/web/node_modules ./web/node_modules
+
+COPY demo-entrypoint.sh ./demo-entrypoint.sh
+RUN chmod +x ./demo-entrypoint.sh
+
+ENV API_PORT=3001
+ENV PORT=3000
+EXPOSE 3000
+ENTRYPOINT ["./demo-entrypoint.sh"]
