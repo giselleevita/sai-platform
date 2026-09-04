@@ -33,3 +33,51 @@
 4) Run `prisma migrate deploy` as a one-off task (or CI job) before switching traffic.
 5) Upload Next.js static build to S3 + CloudFront (or deploy web via Vercel using the same `NEXT_PUBLIC_API_URL`).
 6) Verify `/health`, smoke-test auth/login, and run `tests/api/test-suite.sh` against staging.
+
+---
+
+## Demo deployment: one host, Docker Compose
+
+Everything the demo needs runs on a single small VM: Postgres, Redis, the API
+and the web app. Verified end to end against `docker-compose.prod.yml`, from
+image build through migrations, seeding and a working sign-in.
+
+The database must be PostgreSQL. Prisma's datasource provider is `postgresql`
+and Prisma has no Oracle connector, so Oracle Database would mean replacing the
+data layer rather than changing a connection string. Oracle Cloud is still a
+reasonable *host*: an Always Free ARM instance runs this stack comfortably.
+
+```bash
+# on the host, in a clone of this repository
+cp .env.example .env   # then set the values below
+docker compose -f docker-compose.prod.yml build
+docker compose -f docker-compose.prod.yml up -d
+docker compose -f docker-compose.prod.yml exec api npx prisma migrate deploy
+docker compose -f docker-compose.prod.yml exec api npm run db:seed:prod
+```
+
+Required in `.env`:
+
+| Variable | Notes |
+|---|---|
+| `JWT_SECRET` | The API refuses to start in production without a real value. |
+| `PUBLIC_URL` | The origin the browser uses. Becomes `CORS_ORIGIN`. |
+| `DEMO_USER_EMAIL`, `DEMO_USER_PASSWORD` | Read by the seed. |
+| `NEXT_PUBLIC_DEMO_EMAIL`, `NEXT_PUBLIC_DEMO_PASSWORD` | Shown on the login page. Leave unset outside a demo and the credentials block disappears. |
+| `API_ORIGIN` | Defaults to `http://api:3001`. |
+
+### Three things that are build-time, not run-time
+
+Next inlines `NEXT_PUBLIC_*` values and resolves rewrite destinations during
+`next build`, writing them into `.next/routes-manifest.json`. Setting them only
+in `environment:` changes nothing: the container keeps proxying to `localhost`,
+which inside the web container is the web container itself. They are passed as
+build arguments, and changing any of them needs `build`, not `restart`.
+
+`turbo.json` declares `API_ORIGIN` and `NEXT_PUBLIC_*` as inputs to the build
+task. Without that, turbo serves a cached build made with different values.
+
+### Reset
+
+The seed is idempotent, so a nightly reset is the same command again. To wipe
+instead, remove the `sai_postgres_data` volume and re-run migrate and seed.

@@ -21,7 +21,8 @@
     "predev": "npm run check:node",
     "prebuild": "npm run check:node",
     "pretest": "npm run check:node",
-    "db:seed": "ts-node prisma/seed.ts"
+    "db:seed": "ts-node src/seed.ts",
+    "db:seed:prod": "node dist/seed.js"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1035.0",
@@ -78,6 +79,6 @@
     "typescript": "^5.3.3"
   },
   "prisma": {
-    "seed": "ts-node prisma/seed.ts"
+    "seed": "ts-node src/seed.ts"
   }
 }

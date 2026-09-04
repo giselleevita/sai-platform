@@ -1,5 +1,9 @@
 generator client {
   provider = "prisma-client-js"
+  // The runtime image is alpine. Without the musl target Prisma ships only
+  // the host engine and every schema-engine call in the container fails to
+  // parse, which is how a deployed API cannot run its own migrations.
+  binaryTargets = ["native", "linux-musl-openssl-3.0.x"]
 }
 
 datasource db {

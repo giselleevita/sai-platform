@@ -10,6 +10,18 @@ COPY packages/risk-scoring/package*.json packages/risk-scoring/
 RUN npm ci
 
 FROM base AS build
+# NEXT_PUBLIC_* values are inlined by next build, so they have to arrive as
+# build arguments. Passing them at run time does nothing for a production
+# build. Leave them unset outside a demo and the login page shows no
+# credentials at all.
+# Rewrite destinations are baked into the build, so the API origin has to be
+# known here rather than at run time.
+ARG API_ORIGIN="http://localhost:3001"
+ENV API_ORIGIN=$API_ORIGIN
+ARG NEXT_PUBLIC_DEMO_EMAIL=""
+ARG NEXT_PUBLIC_DEMO_PASSWORD=""
+ENV NEXT_PUBLIC_DEMO_EMAIL=$NEXT_PUBLIC_DEMO_EMAIL
+ENV NEXT_PUBLIC_DEMO_PASSWORD=$NEXT_PUBLIC_DEMO_PASSWORD
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=deps /app/apps/web/node_modules ./apps/web/node_modules
 COPY . .

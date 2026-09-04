@@ -24,6 +24,9 @@ services:
       REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
       LOG_FORMAT: ${LOG_FORMAT:-json}
       SENTRY_DSN: ${SENTRY_DSN:-}
+      # The API refuses to start in production without a real value here.
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET before deploying}
+      CORS_ORIGIN: ${PUBLIC_URL:-http://localhost:3000}
     depends_on:
       - postgres
       - redis
@@ -34,10 +37,18 @@ services:
     build:
       context: .
       dockerfile: apps/web/Dockerfile
+      args:
+        # All three are build-time: Next bakes rewrite destinations and
+        # NEXT_PUBLIC_* values into the build. Changing them needs a rebuild.
+        API_ORIGIN: ${API_ORIGIN:-http://api:3001}
+        NEXT_PUBLIC_DEMO_EMAIL: ${NEXT_PUBLIC_DEMO_EMAIL:-}
+        NEXT_PUBLIC_DEMO_PASSWORD: ${NEXT_PUBLIC_DEMO_PASSWORD:-}
     restart: unless-stopped
     environment:
       NODE_ENV: production
-      NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-http://localhost:3001}
+      # Kept for parity with the build argument. The value that takes effect
+      # is the one passed at build time.
+      API_ORIGIN: ${API_ORIGIN:-http://api:3001}
     depends_on:
       - api
     ports:
