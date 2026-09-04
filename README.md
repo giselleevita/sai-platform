@@ -126,6 +126,7 @@ Reload http://localhost:3000 to land on a populated dashboard.
 - **[Deployment](docs/DEPLOYMENT.md)** - Production deployment guide
 - **[CI/CD](docs/CI_CD.md)** - Continuous integration setup
 - **[MVP Release Notes](docs/RELEASE_NOTES_MVP.md)** - Delivered scope, known limits, and rollback notes
+- **[EU AI Act mapping](docs/eu-ai-act-mapping.md)** - Which features are relevant to which obligations, and what they don't claim
 
 All documentation is in the `docs/` directory.
 
