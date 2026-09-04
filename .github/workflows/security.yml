@@ -30,7 +30,30 @@ jobs:
         run: npm ci
 
       - name: Fail on high/critical prod vulnerabilities
-        run: npm audit --omit=dev --audit-level=high
+        # npm audit exits non-zero both when it finds advisories and when the
+        # registry's audit endpoint is unreachable, which turned an npm outage
+        # into a red badge on the default branch. Findings fail the build.
+        # An unreachable endpoint is reported and retried, then warned about.
+        run: |
+          set +e
+          for attempt in 1 2 3; do
+            report=$(npm audit --omit=dev --audit-level=high --json 2>&1)
+            status=$?
+            if [ "$status" -eq 0 ]; then
+              echo "No high or critical production advisories."
+              exit 0
+            fi
+            if echo "$report" | grep -q "audit endpoint returned an error"; then
+              echo "::warning::npm audit endpoint unavailable (attempt $attempt of 3)."
+              sleep $((attempt * 15))
+              continue
+            fi
+            echo "$report"
+            echo "::error::npm audit reported high or critical production advisories."
+            exit 1
+          done
+          echo "::warning::Skipping the dependency audit: the npm audit endpoint was unavailable for all attempts."
+          exit 0
 
   secret-scan:
     name: Secret Scan (Gitleaks)
