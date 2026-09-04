@@ -32,27 +32,31 @@ jobs:
       - name: Fail on high/critical prod vulnerabilities
         # npm audit exits non-zero both when it finds advisories and when the
         # registry's audit endpoint is unreachable, which turned an npm outage
-        # into a red badge on the default branch. Findings fail the build.
-        # An unreachable endpoint is reported and retried, then warned about.
+        # into a red badge on the default branch. Findings fail the build. An
+        # unreachable endpoint is retried once and then warned about.
+        #
+        # Each attempt is bounded: when the endpoint is down npm hangs for
+        # about seven minutes before giving up, which is long enough for
+        # unbounded retries to exhaust the job timeout and cancel the run.
         run: |
           set +e
-          for attempt in 1 2 3; do
-            report=$(npm audit --omit=dev --audit-level=high --json 2>&1)
+          for attempt in 1 2; do
+            report=$(timeout 150 npm audit --omit=dev --audit-level=high --json 2>&1)
             status=$?
             if [ "$status" -eq 0 ]; then
               echo "No high or critical production advisories."
               exit 0
             fi
-            if echo "$report" | grep -q "audit endpoint returned an error"; then
-              echo "::warning::npm audit endpoint unavailable (attempt $attempt of 3)."
-              sleep $((attempt * 15))
+            if [ "$status" -eq 124 ] || echo "$report" | grep -q "audit endpoint returned an error"; then
+              echo "::warning::npm audit endpoint unavailable or timed out (attempt $attempt of 2)."
+              sleep 20
               continue
             fi
             echo "$report"
             echo "::error::npm audit reported high or critical production advisories."
             exit 1
           done
-          echo "::warning::Skipping the dependency audit: the npm audit endpoint was unavailable for all attempts."
+          echo "::warning::Dependency audit skipped: the npm audit endpoint was unavailable for every attempt."
           exit 0
 
   secret-scan:
