@@ -56,6 +56,8 @@ export function SidebarNav(props: {
           { name: 'Inventory', href: '/inventory', icon: '◻︎' },
           { name: 'Risks', href: '/risks', icon: '◻︎' },
           { name: 'Compliance', href: '/compliance', icon: '◻︎' },
+          { name: 'Conformity', href: '/conformity', icon: '◻︎' },
+          { name: 'General-purpose AI', href: '/gpai', icon: '◻︎' },
         ],
       },
       {

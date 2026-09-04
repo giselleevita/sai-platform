@@ -175,6 +175,24 @@ npm run db:push      # Push schema changes (dev only)
 - Test coverage remains incomplete across the full API and UI surface.
 - See [MVP Release Notes](docs/RELEASE_NOTES_MVP.md) for delivered scope and known limits.
 
+### API surface without a UI
+
+These endpoints work and are reachable, but nothing in the web app calls them
+yet: `audit`, `exceptions`, `import-export`, `invitations`, `ml-integrations`,
+`pricing`, `users`, `vendors`, and the `bulk` delete and update operations.
+They are usable through the API and through SCIM where relevant. Listing them
+here is more useful than a screenshot of a screen that does not exist.
+
+### Risk scoring
+
+Scoring is deterministic and versioned, not a model. `RISK_MODEL_VERSION` is
+stamped on every score and stored with each row of risk history, so a score
+recorded last quarter can still be explained after the weights change. Risk
+follows the most sensitive data type a tool touches, recording an additional
+category never lowers a score, an unclassified tool is treated as unassessed
+rather than safe, and self-declared controls are capped in how far they can
+reduce a score.
+
 ## Security Features
 
 - **Authentication**: JWT tokens in httpOnly cookies with CSRF protection
