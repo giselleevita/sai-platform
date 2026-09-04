@@ -20,7 +20,8 @@
     "check:node": "node ../../scripts/check-node-version.cjs",
     "predev": "npm run check:node",
     "prebuild": "npm run check:node",
-    "pretest": "npm run check:node"
+    "pretest": "npm run check:node",
+    "db:seed": "ts-node prisma/seed.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1035.0",
@@ -75,5 +76,8 @@
     "ts-jest": "^29.4.6",
     "ts-node": "^10.9.2",
     "typescript": "^5.3.3"
+  },
+  "prisma": {
+    "seed": "ts-node prisma/seed.ts"
   }
 }

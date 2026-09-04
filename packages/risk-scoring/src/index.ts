@@ -8,7 +8,7 @@ import { AIToolInput, RiskScore } from "@sai/shared-types";
  * able to tell whether the tool changed or the model did, and a score stored
  * without a model version cannot answer that.
  */
-export const RISK_MODEL_VERSION = "1.1.0";
+export const RISK_MODEL_VERSION = "1.2.0";
 
 const DATA_TYPE_RISK: Record<string, number> = {
   PII: 30,
@@ -56,6 +56,26 @@ const RECOGNISED_CONTROLS = [
 ];
 const CONTROL_CREDIT = 2;
 const MAX_CONTROL_MITIGATION = 10;
+
+/**
+ * The highest score the factors can produce: the most sensitive data type,
+ * every category recorded, a hundred or more users, daily use, no controls.
+ */
+export const MAX_POSSIBLE_SCORE =
+  Math.max(...Object.values(DATA_TYPE_RISK)) + MAX_BREADTH_BONUS + 20 + 10;
+
+/**
+ * Thresholds sit inside the achievable range. They previously started
+ * Critical at 76, which the factors could never reach: the worst possible
+ * tool scored 66, so no tool could ever be Critical and the level existed
+ * only in the type. Changing a threshold changes stored levels, which is why
+ * the model version moves with it.
+ */
+const LEVEL_THRESHOLDS = {
+  critical: 55,
+  high: 40,
+  medium: 20,
+};
 
 const MAX_USER_RISK = 20;
 const USERS_AT_MAX_RISK = 100;
@@ -119,9 +139,9 @@ export function calculateRiskScore(tool: AIToolInput): RiskScore {
   const total = Math.max(0, Math.min(100, data + users + frequency + controls));
 
   let level: RiskScore["level"];
-  if (total > 75) level = "Critical";
-  else if (total > 50) level = "High";
-  else if (total > 25) level = "Medium";
+  if (total > LEVEL_THRESHOLDS.critical) level = "Critical";
+  else if (total > LEVEL_THRESHOLDS.high) level = "High";
+  else if (total > LEVEL_THRESHOLDS.medium) level = "Medium";
   else level = "Low";
 
   return {

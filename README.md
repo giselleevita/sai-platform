@@ -183,6 +183,15 @@ yet: `audit`, `exceptions`, `import-export`, `invitations`, `ml-integrations`,
 They are usable through the API and through SCIM where relevant. Listing them
 here is more useful than a screenshot of a screen that does not exist.
 
+### Demo data
+
+`npm run db:seed --workspace @sai/api` seeds a demo tenant: twelve AI tools
+scored by the real engine across all four risk levels, four controls with
+evidence in four different states, risks, incidents and three registered
+general-purpose models. Re-running is safe, every record is upserted on a
+deterministic key, so a nightly reset is the same command again. Credentials
+come from `DEMO_USER_EMAIL` and `DEMO_USER_PASSWORD`.
+
 ### Risk scoring
 
 Scoring is deterministic and versioned, not a model. `RISK_MODEL_VERSION` is
@@ -192,6 +201,10 @@ follows the most sensitive data type a tool touches, recording an additional
 category never lowers a score, an unclassified tool is treated as unassessed
 rather than safe, and self-declared controls are capped in how far they can
 reduce a score.
+
+Levels sit inside the range the factors can actually produce. Critical
+previously began at 76 while the worst possible tool scored 66, so no tool
+could ever be Critical.
 
 ## Security Features
 

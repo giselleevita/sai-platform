@@ -1,5 +1,5 @@
 import { AIToolInput } from "@sai/shared-types";
-import { calculateRiskScore, RISK_MODEL_VERSION } from "./index";
+import { calculateRiskScore, MAX_POSSIBLE_SCORE, RISK_MODEL_VERSION } from "./index";
 
 const tool = (overrides: Partial<AIToolInput> = {}): AIToolInput => ({
   name: "Test tool",
@@ -77,6 +77,22 @@ describe("calculateRiskScore", () => {
 
     expect(many.score).toBeGreaterThan(few.score);
     expect(daily.score).toBeGreaterThan(rarely.score);
+  });
+
+  it("can reach every level the type allows", () => {
+    const worst = calculateRiskScore(
+      tool({ dataTypes: ["PII", "Financial", "IP", "Proprietary"], users: 500, frequency: "Daily", controls: [] })
+    );
+    const best = calculateRiskScore(
+      tool({ dataTypes: ["Public"], users: 1, frequency: "Rarely", controls: ["MFA", "Encryption"] })
+    );
+
+    expect(worst.level).toBe("Critical");
+    expect(best.level).toBe("Low");
+  });
+
+  it("keeps the top threshold inside the achievable range", () => {
+    expect(MAX_POSSIBLE_SCORE).toBeGreaterThan(55);
   });
 
   it("stamps every score with the model version", () => {
