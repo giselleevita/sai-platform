@@ -26,6 +26,10 @@ services:
       SENTRY_DSN: ${SENTRY_DSN:-}
       # The API refuses to start in production without a real value here.
       JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET before deploying}
+      # Migrate on boot, and seed the demo tenant when asked to.
+      SEED_ON_START: ${SEED_ON_START:-false}
+      DEMO_USER_EMAIL: ${DEMO_USER_EMAIL:-}
+      DEMO_USER_PASSWORD: ${DEMO_USER_PASSWORD:-}
       CORS_ORIGIN: ${PUBLIC_URL:-http://localhost:3000}
     depends_on:
       - postgres

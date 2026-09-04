@@ -10,7 +10,17 @@ import type { NextConfig } from "next";
  * deployed build could not reach the API at all. Pass it as a build argument,
  * for example http://api:3001.
  */
-const apiOrigin = process.env.API_ORIGIN || "http://localhost:3001";
+function resolveApiOrigin(): string {
+  const configured = process.env.API_ORIGIN?.trim();
+  if (!configured) return "http://localhost:3001";
+  // Hosts that inject another service's address give a bare hostname, so a
+  // scheme is added when one is missing rather than making the blueprint ask
+  // a human to paste a URL after the first deploy.
+  if (/^https?:\/\//.test(configured)) return configured;
+  return configured.includes(":") ? `http://${configured}` : `https://${configured}`;
+}
+
+const apiOrigin = resolveApiOrigin();
 
 const nextConfig: NextConfig = {
   async rewrites() {

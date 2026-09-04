@@ -36,7 +36,38 @@
 
 ---
 
-## Demo deployment: one host, Docker Compose
+## Demo deployment: free, and without a server
+
+`render.yaml` deploys both services from this repository. Render reads it,
+builds the two images and wires them to each other, so the only value it asks
+for is the database connection string.
+
+1. Create a free Neon project and copy its connection string. Neon is used
+   rather than Render's own free Postgres, which expires thirty days after
+   creation and takes the demo with it.
+2. In Render: New, then Blueprint, then point it at this repository.
+3. Paste the Neon string when prompted for `DATABASE_URL`.
+
+That is the whole setup. The API container applies migrations and seeds the
+demo tenant on every boot, both idempotent, because free plans give you no
+shell and a deployment that needs someone to run migrations by hand is a
+deployment that starts broken.
+
+Render turns service environment variables into Docker build arguments, which
+this repository depends on: Next bakes the API origin and every `NEXT_PUBLIC_*`
+value into the build, so they must exist before the image is built. `API_ORIGIN`
+is filled in from the API service's own hostname, and the config adds the scheme
+when a host arrives without one.
+
+**What free costs you.** A Render free service sleeps after fifteen minutes
+without traffic and takes about a minute to wake, so the first visitor after a
+quiet spell waits. Say so next to the link rather than letting someone assume
+the app is broken. Neon's free compute also scales to zero and wakes in a second
+or two. Neither has a card requirement for the demo sizes used here.
+
+---
+
+## Alternative: one host, Docker Compose
 
 Everything the demo needs runs on a single small VM: Postgres, Redis, the API
 and the web app. Verified end to end against `docker-compose.prod.yml`, from

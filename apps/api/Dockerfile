@@ -35,5 +35,8 @@ COPY --from=build /app/packages/risk-scoring/dist ./packages/risk-scoring/dist
 COPY --from=build /app/packages/shared-types/package.json ./packages/shared-types/package.json
 COPY --from=build /app/packages/shared-types/dist ./packages/shared-types/dist
 
+COPY --from=build /app/apps/api/docker-entrypoint.sh ./docker-entrypoint.sh
+RUN chmod +x ./docker-entrypoint.sh
+
 EXPOSE 3001
-CMD ["node", "dist/main.js"]
+ENTRYPOINT ["./docker-entrypoint.sh"]

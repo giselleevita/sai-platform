@@ -1,0 +1,57 @@
+# One-click deployment of the demo: Render reads this, creates both services
+# and wires them together. The only value it asks for is DATABASE_URL, which
+# comes from a free Neon project.
+#
+# Render turns service environment variables into Docker build arguments, which
+# matters here: Next bakes the API origin and every NEXT_PUBLIC_* value into the
+# build, so they have to be present before the image is built rather than after.
+services:
+  - type: web
+    name: sai-api
+    runtime: docker
+    plan: free
+    region: frankfurt
+    dockerfilePath: ./apps/api/Dockerfile
+    dockerContext: .
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      # Free plans have no shell, so the container migrates and seeds itself
+      # on boot. Both are idempotent.
+      - key: SEED_ON_START
+        value: "true"
+      # Paste a Neon connection string. Render's own free Postgres expires
+      # thirty days after creation, which is not a demo you can put on a CV.
+      - key: DATABASE_URL
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true
+      - key: DEMO_USER_EMAIL
+        value: demo@sai-platform.example
+      - key: DEMO_USER_PASSWORD
+        value: demo-password-123
+      # Caching is optional. Without REDIS_URL the API logs that it is
+      # disabled and carries on.
+
+  - type: web
+    name: sai-web
+    runtime: docker
+    plan: free
+    region: frankfurt
+    dockerfilePath: ./apps/web/Dockerfile
+    dockerContext: .
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: API_ORIGIN
+        fromService:
+          type: web
+          name: sai-api
+          property: host
+      # Demo credentials, shown on the login page. Not secrets: they open a
+      # tenant of generated data that is reseeded on every boot.
+      - key: NEXT_PUBLIC_DEMO_EMAIL
+        value: demo@sai-platform.example
+      - key: NEXT_PUBLIC_DEMO_PASSWORD
+        value: demo-password-123
