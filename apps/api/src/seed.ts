@@ -74,6 +74,15 @@ const INCIDENTS = [
   { title: 'Code assistant suggested a licensed snippet', severity: 'MEDIUM', description: 'Flagged during review; snippet removed before merge.' },
 ];
 
+const VENDORS = [
+  { name: 'OpenAI', region: 'US', securityReviewStatus: 'Approved' },
+  { name: 'Anthropic', region: 'US', securityReviewStatus: 'Approved' },
+  { name: 'Otter.ai', region: 'US', securityReviewStatus: 'In review' },
+  { name: 'UiPath', region: 'EU', securityReviewStatus: 'Approved' },
+  { name: 'DeepL', region: 'EU', securityReviewStatus: 'Not started' },
+  { name: 'Jasper', region: 'US', securityReviewStatus: 'Not started' },
+];
+
 const GPAI = [
   { provider: 'MLFLOW' as const, displayName: 'Support summariser', modelFamily: 'llama-3-8b-instruct', transparencySummary: 'Summarises support threads. Trained by the provider on public web data. Not used for decisions about individuals.', euDeclarationRef: 'EU-DEC-2026-0412' },
   { provider: 'SAGEMAKER' as const, displayName: 'Churn scorer', modelFamily: 'xgboost-1.7', transparencySummary: 'Predicts renewal likelihood from account telemetry. Reviewed quarterly against outcome data.', euDeclarationRef: null },
@@ -224,6 +233,17 @@ async function main() {
     }
   }
 
+  let vendors = 0;
+  for (const vendor of VENDORS) {
+    const existing = await prisma.vendor.findFirst({
+      where: { companyId: company.id, name: vendor.name },
+    });
+    if (!existing) {
+      await prisma.vendor.create({ data: { companyId: company.id, ...vendor } });
+      vendors += 1;
+    }
+  }
+
   let models = 0;
   for (const model of GPAI) {
     const existing = await prisma.mLIntegration.findFirst({
@@ -254,6 +274,7 @@ async function main() {
       `  tools: ${tools}`,
       `  controls: ${controlIds.length}, evidence created: ${evidence}`,
       `  risks created: ${risks}, incidents created: ${incidents}`,
+      `  vendors created: ${vendors}`,
       `  general-purpose models created: ${models}`,
     ].join('\n')
   );

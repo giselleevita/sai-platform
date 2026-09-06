@@ -58,6 +58,7 @@ export function SidebarNav(props: {
           { name: 'Compliance', href: '/compliance', icon: '◻︎' },
           { name: 'Conformity', href: '/conformity', icon: '◻︎' },
           { name: 'General-purpose AI', href: '/gpai', icon: '◻︎' },
+          { name: 'Vendors', href: '/vendors', icon: '◻︎' },
         ],
       },
       {

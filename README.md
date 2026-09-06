@@ -180,7 +180,7 @@ npm run db:push      # Push schema changes (dev only)
 
 These endpoints work and are reachable, but nothing in the web app calls them
 yet: `audit`, `exceptions`, `import-export`, `invitations`, `ml-integrations`,
-`pricing`, `users`, `vendors`, and the `bulk` delete and update operations.
+`pricing`, `users`, and the `bulk` delete and update operations.
 They are usable through the API and through SCIM where relevant. Listing them
 here is more useful than a screenshot of a screen that does not exist.
 
