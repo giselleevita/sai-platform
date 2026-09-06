@@ -70,7 +70,10 @@ export function SidebarNav(props: {
       },
       {
         name: 'Settings',
-        items: [{ name: 'Plan & usage', href: '/plan', icon: '◻︎' }],
+        items: [
+          { name: 'Team', href: '/team', icon: '◻︎' },
+          { name: 'Plan & usage', href: '/plan', icon: '◻︎' },
+        ],
       },
     ],
     [],
