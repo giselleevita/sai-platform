@@ -609,6 +609,7 @@ model AuditLog {
   @@index([companyId])
   @@index([action])
   @@index([createdAt])
+  @@index([companyId, createdAt])
 }
 
 model ComplianceSnapshot {

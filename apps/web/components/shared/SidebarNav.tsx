@@ -72,6 +72,7 @@ export function SidebarNav(props: {
         name: 'Settings',
         items: [
           { name: 'Team', href: '/team', icon: '◻︎' },
+          { name: 'Audit trail', href: '/audit', icon: '◻︎' },
           { name: 'Plan & usage', href: '/plan', icon: '◻︎' },
         ],
       },

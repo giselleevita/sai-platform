@@ -267,6 +267,97 @@ async function main() {
     }
   }
 
+  // The audit trail is written by the services, so a database seeded through
+  // Prisma directly would leave the trail empty and the screen would look
+  // broken rather than new. Backfill a history that matches what was seeded,
+  // using the real record ids so every row points at something that exists.
+  let auditEntries = 0;
+  const existingAudit = await prisma.auditLog.count({ where: { companyId: company.id } });
+  if (existingAudit === 0) {
+    const [seededTools, seededRisks, seededControls, seededVendors, seededIncidents] =
+      await Promise.all([
+        prisma.aITool.findMany({ where: { companyId: company.id }, select: { id: true, name: true } }),
+        prisma.risk.findMany({ where: { companyId: company.id }, select: { id: true, title: true } }),
+        prisma.control.findMany({ where: { companyId: company.id }, select: { id: true, name: true } }),
+        prisma.vendor.findMany({ where: { companyId: company.id }, select: { id: true, name: true } }),
+        prisma.incident.findMany({ where: { companyId: company.id }, select: { id: true, title: true } }),
+      ]);
+
+    const day = 24 * 60 * 60 * 1000;
+    const trail: { action: string; targetType: string; targetId: string; daysAgo: number; changes?: Record<string, unknown> }[] = [];
+
+    seededTools.forEach((tool, index) => {
+      trail.push({
+        action: 'inventory.tool.create',
+        targetType: 'AITool',
+        targetId: tool.id,
+        daysAgo: 45 - index,
+        changes: { name: tool.name },
+      });
+    });
+    seededControls.forEach((control, index) => {
+      trail.push({
+        action: 'control.create',
+        targetType: 'Control',
+        targetId: control.id,
+        daysAgo: 30 - index,
+        changes: { name: control.name },
+      });
+    });
+    seededVendors.forEach((vendor, index) => {
+      trail.push({
+        action: 'vendor.create',
+        targetType: 'Vendor',
+        targetId: vendor.id,
+        daysAgo: 21 - index,
+        changes: { name: vendor.name },
+      });
+    });
+    seededRisks.forEach((risk, index) => {
+      trail.push({
+        action: 'risk.create',
+        targetType: 'Risk',
+        targetId: risk.id,
+        daysAgo: 14 - index,
+        changes: { title: risk.title },
+      });
+      if (index === 0) {
+        trail.push({
+          action: 'risk.update',
+          targetType: 'Risk',
+          targetId: risk.id,
+          daysAgo: 6,
+          changes: { status: { from: 'OPEN', to: 'MITIGATING' } },
+        });
+      }
+    });
+    seededIncidents.forEach((incident, index) => {
+      trail.push({
+        action: 'incident.create',
+        targetType: 'Incident',
+        targetId: incident.id,
+        daysAgo: 5 - index,
+        changes: { title: incident.title },
+      });
+    });
+
+    const now = Date.now();
+    for (const entry of trail) {
+      await prisma.auditLog.create({
+        data: {
+          companyId: company.id,
+          actorId: user.id,
+          action: entry.action,
+          targetType: entry.targetType,
+          targetId: entry.targetId,
+          changes: entry.changes as any,
+          createdAt: new Date(now - Math.max(entry.daysAgo, 0) * day),
+        },
+      });
+      auditEntries += 1;
+    }
+  }
+
   console.log(
     [
       `Seeded ${company.name} (${company.id})`,
@@ -276,6 +367,7 @@ async function main() {
       `  risks created: ${risks}, incidents created: ${incidents}`,
       `  vendors created: ${vendors}`,
       `  general-purpose models created: ${models}`,
+      `  audit entries backfilled: ${auditEntries}`,
     ].join('\n')
   );
 }

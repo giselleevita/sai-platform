@@ -20,7 +20,7 @@ use.
 - **Risk Management** - Likelihood/impact analysis with accept/defer/reject decisions and sign-off records
 - **Governance & Compliance** - Policy and control management, evidence coverage and expiry tracking, and compliance dashboards
 - **Incident Tracking** - Complete incident lifecycle management with severity and reporting deadlines
-- **Audit Logging** - Searchable, exportable activity records with a platform-wide activity feed
+- **Audit Logging** - An append-only trail with filters for action, record type, person and date range, cursor paged so nothing is silently truncated
 - **Reporting & Integrations** - PDF reports, Excel import/export, custom report builder, webhooks, custom fields, threaded comments, and OpenAPI documentation
 
 ## Architecture
@@ -179,7 +179,7 @@ npm run db:push      # Push schema changes (dev only)
 ### API surface without a UI
 
 These endpoints work and are reachable, but nothing in the web app calls them
-yet: `audit`, `exceptions`, `import-export`, `ml-integrations`, `pricing`,
+yet: `exceptions`, `import-export`, `ml-integrations`, `pricing`,
 and the `bulk` delete and update operations.
 They are usable through the API and through SCIM where relevant. Listing them
 here is more useful than a screenshot of a screen that does not exist.

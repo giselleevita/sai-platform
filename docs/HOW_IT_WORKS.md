@@ -483,7 +483,12 @@ Total: 30 + 15 + 15 - 10 - 5 = 45 points → "Medium" risk
 - `PATCH /api/exceptions/:id` - Approve/deny exception
 
 ### Audit
-- `GET /api/audit` - Query audit log
+- `GET /api/audit` - Query the audit trail. Filters: `action`, `targetType`,
+  `actorId`, `from`, `to`. Paged with `limit` (default 50, max 200) and
+  `cursor`; the next cursor comes back in `meta.nextCursor`, and is `null` at
+  the end of the trail.
+- `GET /api/audit/facets` - The action names, record types and people that
+  actually occur in this tenant's trail, for populating the filters
 
 ### Integrations
 - `GET /api/webhooks` - List webhook subscriptions

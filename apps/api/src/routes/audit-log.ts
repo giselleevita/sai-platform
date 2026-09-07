@@ -8,6 +8,11 @@ const router = Router();
 router.use(authMiddleware);
 
 // Alias route for audit logs
+router.get(
+  '/facets',
+  requirePermission(Permission.AUDITLOG_READ),
+  asyncHandler(AuditController.facets)
+);
 router.get('/', requirePermission(Permission.AUDITLOG_READ), asyncHandler(AuditController.list));
 
 export default router;

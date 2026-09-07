@@ -12,7 +12,7 @@ export const api = {
   async request<T>(
     endpoint: string,
     options: RequestInit = {}
-  ): Promise<{ success: boolean; data?: T; error?: string }> {
+  ): Promise<{ success: boolean; data?: T; error?: string; meta?: Record<string, unknown> }> {
     // Prefer canonical API mount: `/api/v1/*`. Keep `/api/health*` and docs unmodified.
     // This avoids relying on the server-side legacy redirect for most calls.
     if (
@@ -74,6 +74,9 @@ export const api = {
       return {
         success: true,
         data: data.data || data,
+        // Paging cursors and totals ride alongside the payload rather than
+        // inside it, so callers that need them do not have to re-fetch.
+        ...(data && typeof data === 'object' && data.meta ? { meta: data.meta } : {}),
       };
     } catch (error) {
       if (error instanceof TypeError && error.message.includes('fetch')) {
