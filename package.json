@@ -44,6 +44,7 @@
       "postcss": "8.5.25"
     },
     "brace-expansion@2": "2.1.4",
-    "brace-expansion@1": "1.1.18"
+    "brace-expansion@1": "1.1.18",
+    "qs": "6.16.0"
   }
 }
