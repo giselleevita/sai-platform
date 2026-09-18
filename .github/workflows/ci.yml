@@ -127,6 +127,7 @@ jobs:
   docker-build:
     name: Docker build (API + Web)
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
